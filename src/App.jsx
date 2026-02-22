@@ -5,7 +5,7 @@ import MoodTracker from "./components/pages/MoodTracker";
 import SleepLog from "./components/pages/SleepLog";
 import ActivityPage from "./components/pages/ActivityPage";
 import GoalsPage from "./components/pages/GoalsPage";
-import MindfulnessPage from "./components/pages/Mindfulnesspage";
+import MindfulnessPage from "./components/pages/MindfulnessPage";
 import SettingsPage from "./components/pages/SettingsPage";
 import LoginPage from "./components/pages/LoginPage";
 
@@ -53,14 +53,14 @@ export default function App() {
     );
   }, [wellnessData]);
 
-  /* ================= LOGOUT FUNCTION ================= */
+  /* ================= LOGOUT ================= */
 
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
-    setIsLoggedIn(false); // 🔥 THIS is what triggers login screen
+    setIsLoggedIn(false);
   };
 
-  /* ================= PROTECTED ROUTE ================= */
+  /* ================= LOGIN PROTECTION ================= */
 
   if (!isLoggedIn) {
     return (
@@ -78,7 +78,6 @@ export default function App() {
   return (
     <div className="flex h-screen">
 
-      {/* Sidebar */}
       <div className="w-64 border-r">
         <NavigationSidebar
           activeTab={activeTab}
@@ -86,46 +85,31 @@ export default function App() {
         />
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto bg-gray-50 p-8">
+      {/* 🔥 Removed bg-gray-50 and p-8 */}
+      <div className="flex-1 overflow-auto">
 
         {activeTab === "dashboard" && (
           <WellnessDashboard data={wellnessData} />
         )}
 
         {activeTab === "mood" && (
-          <MoodTracker
-            data={wellnessData}
-            setData={setWellnessData}
-          />
+          <MoodTracker data={wellnessData} setData={setWellnessData} />
         )}
 
         {activeTab === "sleep" && (
-          <SleepLog
-            data={wellnessData}
-            setData={setWellnessData}
-          />
+          <SleepLog data={wellnessData} setData={setWellnessData} />
         )}
 
         {activeTab === "activity" && (
-          <ActivityPage
-            data={wellnessData}
-            setData={setWellnessData}
-          />
+          <ActivityPage data={wellnessData} setData={setWellnessData} />
         )}
 
         {activeTab === "goals" && (
-          <GoalsPage
-            data={wellnessData}
-            setData={setWellnessData}
-          />
+          <GoalsPage data={wellnessData} setData={setWellnessData} />
         )}
 
         {activeTab === "mindfulness" && (
-          <MindfulnessPage
-            data={wellnessData}
-            setData={setWellnessData}
-          />
+          <MindfulnessPage data={wellnessData} setData={setWellnessData} />
         )}
 
         {activeTab === "settings" && (
