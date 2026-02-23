@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* Safe Global Styles */
 body {
-  font-family: system-ui, sans-serif;
+  @apply min-h-screen text-gray-800;
+}
+
+/* Glass Card */
+.glass-card {
+  @apply bg-white/40 backdrop-blur-xl border border-white/30 shadow-xl rounded-2xl;
+}
+
+.primary-btn {
+  @apply bg-indigo-500 text-white px-5 py-2 rounded-lg transition hover:bg-indigo-600;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.page-animate {
+  animation: fadeIn 0.4s ease;
 }

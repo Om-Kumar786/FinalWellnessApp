@@ -8,6 +8,7 @@ import GoalsPage from "./components/pages/GoalsPage";
 import MindfulnessPage from "./components/pages/MindfulnessPage";
 import SettingsPage from "./components/pages/SettingsPage";
 import LoginPage from "./components/pages/LoginPage";
+import LandingPage from "./components/pages/LandingPage";
 
 export default function App() {
 
@@ -17,6 +18,7 @@ export default function App() {
     localStorage.getItem("isLoggedIn") === "true"
   );
 
+  const [showLogin, setShowLogin] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
 
   /* ================= WELLNESS DATA ================= */
@@ -33,6 +35,7 @@ export default function App() {
       mindfulnessSessions: 0,
       moodHistory: [],
       sleepHistory: [],
+      goals: [], // ✅ IMPORTANT
     };
 
     if (!saved) return defaultData;
@@ -47,10 +50,7 @@ export default function App() {
   /* ================= SAVE DATA ================= */
 
   useEffect(() => {
-    localStorage.setItem(
-      "wellnessData",
-      JSON.stringify(wellnessData)
-    );
+    localStorage.setItem("wellnessData", JSON.stringify(wellnessData));
   }, [wellnessData]);
 
   /* ================= LOGOUT ================= */
@@ -58,58 +58,81 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
     setIsLoggedIn(false);
+    setShowLogin(false);
   };
 
-  /* ================= LOGIN PROTECTION ================= */
+  /* ================= LANDING + LOGIN FLOW ================= */
 
   if (!isLoggedIn) {
     return (
-      <LoginPage
-        onLogin={() => {
-          localStorage.setItem("isLoggedIn", "true");
-          setIsLoggedIn(true);
-        }}
-      />
+      <>
+        {!showLogin ? (
+          <LandingPage onLoginClick={() => setShowLogin(true)} />
+        ) : (
+          <LoginPage
+            onLogin={() => {
+              localStorage.setItem("isLoggedIn", "true");
+              setIsLoggedIn(true);
+            }}
+          />
+        )}
+      </>
     );
   }
 
   /* ================= MAIN APP ================= */
 
   return (
-    <div className="flex h-screen">
+    <div className="flex min-h-screen bg-gray-100 text-gray-900">
 
-      <div className="w-64 border-r">
+      {/* Sidebar */}
+      <div className="w-64 border-r border-gray-200 bg-white">
         <NavigationSidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
       </div>
 
-      {/* 🔥 Removed bg-gray-50 and p-8 */}
-      <div className="flex-1 overflow-auto">
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto p-8 page-animate">
 
         {activeTab === "dashboard" && (
           <WellnessDashboard data={wellnessData} />
         )}
 
         {activeTab === "mood" && (
-          <MoodTracker data={wellnessData} setData={setWellnessData} />
+          <MoodTracker
+            data={wellnessData}
+            setData={setWellnessData}
+          />
         )}
 
         {activeTab === "sleep" && (
-          <SleepLog data={wellnessData} setData={setWellnessData} />
+          <SleepLog
+            data={wellnessData}
+            setData={setWellnessData}
+          />
         )}
 
         {activeTab === "activity" && (
-          <ActivityPage data={wellnessData} setData={setWellnessData} />
+          <ActivityPage
+            data={wellnessData}
+            setData={setWellnessData}
+          />
         )}
 
         {activeTab === "goals" && (
-          <GoalsPage data={wellnessData} setData={setWellnessData} />
+          <GoalsPage
+            data={wellnessData}
+            setData={setWellnessData}
+          />
         )}
 
         {activeTab === "mindfulness" && (
-          <MindfulnessPage data={wellnessData} setData={setWellnessData} />
+          <MindfulnessPage
+            data={wellnessData}
+            setData={setWellnessData}
+          />
         )}
 
         {activeTab === "settings" && (

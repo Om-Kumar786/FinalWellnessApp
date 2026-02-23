@@ -1,40 +1,88 @@
 export default function MoodTracker({ data, setData }) {
-  const moods = ["Great", "Good", "Okay", "Stressed"];
+  const moods = [
+    { label: "Great", emoji: "😄", color: "bg-green-500" },
+    { label: "Good", emoji: "🙂", color: "bg-blue-500" },
+    { label: "Okay", emoji: "😐", color: "bg-yellow-500" },
+    { label: "Stressed", emoji: "😣", color: "bg-red-500" },
+  ];
 
-  const handleMoodClick = (mood) => {
+  const handleClick = (mood) => {
     const today = new Date().toLocaleDateString("en-US", {
       weekday: "short",
     });
 
     setData((prev) => ({
       ...prev,
-      mood: mood,
+      mood,
       moodHistory: [
-        ...prev.moodHistory.filter((item) => item.day !== today),
-        { day: today, mood: mood },
+        ...prev.moodHistory.filter((m) => m.day !== today),
+        { day: today, mood },
       ],
     }));
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-semibold">Daily Mood</h1>
+    <div className="max-w-5xl mx-auto p-8 space-y-10">
 
+      <h1 className="text-3xl font-semibold">
+        How are you feeling today?
+      </h1>
+
+      {/* Current Mood Display */}
+      <div className="bg-white rounded-2xl p-8 shadow-md border text-center">
+        <p className="text-gray-500 text-sm">Today's Mood</p>
+
+        <h2 className="text-5xl mt-4 font-bold">
+          {data.mood ? data.mood : "Not Selected"}
+        </h2>
+      </div>
+
+      {/* Mood Selection Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        {moods.map((mood) => (
+        {moods.map((m) => (
           <button
-            key={mood}
-            onClick={() => handleMoodClick(mood)}
-            className={`rounded-xl p-6 border transition ${
-              data.mood === mood
-                ? "bg-indigo-500 text-white"
-                : "bg-white hover:bg-gray-100"
+            key={m.label}
+            onClick={() => handleClick(m.label)}
+            className={`p-8 rounded-2xl border transition-all duration-300 hover:scale-105 text-center ${
+              data.mood === m.label
+                ? `${m.color} text-white shadow-lg`
+                : "bg-white hover:bg-gray-50"
             }`}
           >
-            {mood}
+            <div className="text-4xl">{m.emoji}</div>
+            <p className="mt-3 font-medium">{m.label}</p>
           </button>
         ))}
       </div>
+
+      {/* Weekly Mood Preview */}
+      {data.moodHistory?.length > 0 && (
+        <div className="bg-white rounded-2xl p-6 shadow-md border">
+          <h3 className="font-semibold mb-4">
+            Weekly Mood Overview
+          </h3>
+
+          <div className="grid grid-cols-7 gap-3 text-center">
+            {data.moodHistory.map((item, index) => (
+              <div
+                key={index}
+                className="p-3 bg-indigo-50 rounded-lg"
+              >
+                <p className="text-sm text-gray-500">
+                  {item.day}
+                </p>
+                <p className="text-xl">
+                  {
+                    moods.find((m) => m.label === item.mood)
+                      ?.emoji
+                  }
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
