@@ -60,19 +60,19 @@ export default function MindfulnessPage({ data, setData }) {
       </h1>
 
       {/* Timer Card */}
-      <div className="bg-white rounded-2xl p-10 shadow-md border text-center space-y-8">
+      <div className="surface card p-10 text-center space-y-8">
 
-        <h2 className="text-gray-500 text-sm tracking-wide">
+        <h2 className="text-muted text-sm tracking-wide">
           Meditation Timer
         </h2>
 
         {/* Large Timer Display */}
-        <div className="text-6xl font-bold text-indigo-600">
+        <div className="text-6xl font-bold accent-text">
           {formatTime()}
         </div>
 
         {/* Sessions Counter */}
-        <p className="text-gray-500">
+        <p className="text-muted">
           Sessions completed: {data?.mindfulnessSessions || 0}
         </p>
 
@@ -82,7 +82,7 @@ export default function MindfulnessPage({ data, setData }) {
             <button
               key={min}
               onClick={() => setTime(min)}
-              className="px-4 py-2 rounded-lg border hover:bg-indigo-50 transition"
+              className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--surface-2)] transition"
             >
               {min} min
             </button>
@@ -93,14 +93,14 @@ export default function MindfulnessPage({ data, setData }) {
         <div className="flex justify-center gap-4">
           <button
             onClick={() => setIsRunning(true)}
-            className="bg-indigo-500 text-white px-6 py-2 rounded-lg hover:bg-indigo-600 transition"
+            className="btn-primary px-6 py-2 rounded-lg hover:brightness-110 transition"
           >
             Start
           </button>
 
           <button
             onClick={resetTimer}
-            className="border px-6 py-2 rounded-lg hover:bg-gray-100 transition"
+            className="btn-ghost px-6 py-2 rounded-lg hover:bg-[var(--surface-2)] transition"
           >
             Reset
           </button>
@@ -108,7 +108,7 @@ export default function MindfulnessPage({ data, setData }) {
       </div>
 
       {/* Ambient Sounds */}
-      <div className="bg-white rounded-2xl p-8 shadow-md border space-y-6">
+      <div className="surface card p-8 space-y-6">
 
         <h3 className="text-lg font-semibold">
           Ambient Sounds 🎧
@@ -165,10 +165,10 @@ function SoundButton({ label, src }) {
     <div className="text-center">
       <button
         onClick={toggleSound}
-        className={`w-full p-4 rounded-xl border transition ${
+        className={`w-full p-4 rounded-xl border border-[var(--border)] transition ${
           playing
-            ? "bg-indigo-500 text-white"
-            : "hover:bg-gray-100"
+            ? "bg-[var(--accent)] text-white"
+            : "hover:bg-[var(--surface-2)]"
         }`}
       >
         {playing ? "Stop" : "Play"} {label}

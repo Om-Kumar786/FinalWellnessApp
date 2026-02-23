@@ -69,17 +69,17 @@ export default function WellnessDashboard({ data }) {
           <h1 className="text-3xl font-semibold">
             Welcome back, {username} 👋
           </h1>
-          <p className="text-gray-500">{today}</p>
+          <p className="text-muted">{today}</p>
         </div>
 
-        <div className="bg-white px-5 py-2 rounded-full shadow border">
+        <div className="surface shadow-soft px-5 py-2 rounded-full">
           Wellness Score: <span className="font-semibold">{wellnessScore}/100</span>
         </div>
       </div>
 
       {/* ================= MOTIVATIONAL QUOTE ================= */}
-      <div className="bg-indigo-100 p-6 rounded-xl">
-        <p className="font-medium text-indigo-700">
+      <div className="accent-soft p-6 rounded-xl">
+        <p className="font-medium accent-text">
           "{randomQuote}"
         </p>
       </div>
@@ -113,7 +113,7 @@ export default function WellnessDashboard({ data }) {
       </div>
 
       {/* ================= GOALS PREVIEW ================= */}
-      <div className="bg-white p-6 rounded-xl shadow border">
+      <div className="surface card p-6">
         <h3 className="font-semibold mb-3">Goal Progress</h3>
 
         {goals.length > 0 ? (
@@ -128,7 +128,7 @@ export default function WellnessDashboard({ data }) {
                   key={goal.id}
                   className="flex justify-between items-center"
                 >
-                  <span className={goal.completed ? "line-through text-gray-400" : ""}>
+                  <span className={goal.completed ? "line-through text-soft" : ""}>
                     {goal.text}
                   </span>
                   {goal.completed && <span>✅</span>}
@@ -137,7 +137,7 @@ export default function WellnessDashboard({ data }) {
             </ul>
           </>
         ) : (
-          <p className="text-gray-400">No goals yet</p>
+          <p className="text-muted">No goals yet</p>
         )}
       </div>
 
@@ -145,13 +145,13 @@ export default function WellnessDashboard({ data }) {
       <div className="grid lg:grid-cols-2 gap-8">
 
         {/* Mood Distribution */}
-        <div className="bg-white rounded-2xl p-6 shadow-md border hover:shadow-lg transition">
+        <div className="surface card-lg p-6 hover:shadow-lg transition">
           <h3 className="mb-4 font-semibold">
             Mood Distribution
           </h3>
 
           {moodData.length === 0 ? (
-            <p className="text-gray-400">No Data</p>
+            <p className="text-muted">No Data</p>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
@@ -165,31 +165,49 @@ export default function WellnessDashboard({ data }) {
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--surface)",
+                    borderColor: "var(--border)",
+                    color: "var(--text)",
+                    borderRadius: "12px",
+                  }}
+                  itemStyle={{ color: "var(--text)" }}
+                  labelStyle={{ color: "var(--muted)" }}
+                />
               </PieChart>
             </ResponsiveContainer>
           )}
         </div>
 
         {/* Sleep Trends */}
-        <div className="bg-white rounded-2xl p-6 shadow-md border hover:shadow-lg transition">
+        <div className="surface card-lg p-6 hover:shadow-lg transition">
           <h3 className="mb-4 font-semibold">
             Sleep Trends
           </h3>
 
           {sleepHistory.length === 0 ? (
-            <p className="text-gray-400">No Data</p>
+            <p className="text-muted">No Data</p>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={sleepHistory}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="day" tick={{ fill: "var(--muted)" }} />
+                <YAxis tick={{ fill: "var(--muted)" }} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--surface)",
+                    borderColor: "var(--border)",
+                    color: "var(--text)",
+                    borderRadius: "12px",
+                  }}
+                  itemStyle={{ color: "var(--text)" }}
+                  labelStyle={{ color: "var(--muted)" }}
+                />
                 <Line
                   type="monotone"
                   dataKey="hours"
-                  stroke="#6366f1"
+                  stroke="var(--accent)"
                   strokeWidth={3}
                 />
               </LineChart>
@@ -207,7 +225,7 @@ export default function WellnessDashboard({ data }) {
 function StatCard({ title, value, icon, color }) {
   return (
     <div
-      className={`bg-linear-to-r ${color} text-white rounded-2xl p-6 shadow-md hover:scale-105 transition`}
+      className={`bg-linear-to-r ${color} text-white rounded-2xl p-6 shadow-soft hover:scale-105 transition`}
     >
       <div className="flex justify-between items-center">
         <div>

@@ -33,35 +33,35 @@ export default function SleepLog({ data, setData }) {
       <h1 className="text-3xl font-semibold">Sleep Log 🌙</h1>
 
       {/* Main Sleep Card */}
-      <div className="bg-white rounded-2xl p-8 shadow-md border space-y-6 text-center">
+      <div className="surface card p-8 space-y-6 text-center">
 
-        <p className="text-gray-500 text-sm">Last Logged Sleep</p>
+        <p className="text-muted text-sm">Last Logged Sleep</p>
 
-        <h2 className="text-6xl font-bold text-indigo-600">
+        <h2 className="text-6xl font-bold accent-text">
           {sleepHours} hrs
         </h2>
 
         {/* Progress Bar */}
-        <div className="bg-gray-200 h-4 rounded-full mt-4">
+        <div className="bg-[var(--surface-3)] h-4 rounded-full mt-4">
           <div
-            className="bg-indigo-500 h-4 rounded-full transition-all duration-500"
+            className="bg-[var(--accent)] h-4 rounded-full transition-all duration-500"
             style={{ width: `${percentage}%` }}
           />
         </div>
 
-        <p className="text-sm text-gray-500 mt-2">
+        <p className="text-sm text-muted mt-2">
           {percentage.toFixed(0)}% of 8 hour goal
         </p>
 
-        <p className="mt-4 font-medium text-gray-700">
+        <p className="mt-4 font-medium text-[var(--text)]">
           {sleepMessage}
         </p>
       </div>
 
       {/* Quick Select Buttons */}
-      <div className="bg-white rounded-2xl p-6 shadow-md border space-y-4">
+      <div className="surface card p-6 space-y-4">
 
-        <p className="font-medium text-gray-600">
+        <p className="font-medium text-muted">
           Quick Log
         </p>
 
@@ -72,8 +72,8 @@ export default function SleepLog({ data, setData }) {
               onClick={() => handleSleep(hrs)}
               className={`px-4 py-2 rounded-lg border transition ${
                 sleepHours === hrs
-                  ? "bg-indigo-500 text-white"
-                  : "hover:bg-gray-100"
+                  ? "bg-[var(--accent)] text-white border-transparent"
+                  : "hover:bg-[var(--surface-2)] border-[var(--border)]"
               }`}
             >
               {hrs} hrs
@@ -83,9 +83,9 @@ export default function SleepLog({ data, setData }) {
       </div>
 
       {/* Manual Input */}
-      <div className="bg-white rounded-2xl p-6 shadow-md border space-y-4">
+      <div className="surface card p-6 space-y-4">
 
-        <p className="font-medium text-gray-600">
+        <p className="font-medium text-muted">
           Enter Custom Hours
         </p>
 
@@ -93,14 +93,14 @@ export default function SleepLog({ data, setData }) {
           type="number"
           value={sleepHours}
           onChange={(e) => handleSleep(Number(e.target.value))}
-          className="p-3 border rounded-lg w-full focus:ring-2 focus:ring-indigo-400 focus:outline-none transition"
+          className="input p-3 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-[var(--ring)] transition"
           placeholder="Enter sleep hours"
         />
       </div>
 
       {/* Weekly Summary */}
       {data.sleepHistory?.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-md border">
+        <div className="surface card p-6">
           <h3 className="font-semibold mb-4">
             Weekly Sleep Summary
           </h3>
@@ -109,9 +109,9 @@ export default function SleepLog({ data, setData }) {
             {data.sleepHistory.map((item, index) => (
               <div
                 key={index}
-                className="p-3 bg-indigo-50 rounded-lg"
+                className="p-3 accent-soft rounded-lg"
               >
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted">
                   {item.day}
                 </p>
                 <p className="font-semibold">

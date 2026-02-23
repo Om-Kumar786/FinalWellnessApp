@@ -29,8 +29,8 @@ export default function MoodTracker({ data, setData }) {
       </h1>
 
       {/* Current Mood Display */}
-      <div className="bg-white rounded-2xl p-8 shadow-md border text-center">
-        <p className="text-gray-500 text-sm">Today's Mood</p>
+      <div className="surface card p-8 text-center">
+        <p className="text-muted text-sm">Today's Mood</p>
 
         <h2 className="text-5xl mt-4 font-bold">
           {data.mood ? data.mood : "Not Selected"}
@@ -43,10 +43,10 @@ export default function MoodTracker({ data, setData }) {
           <button
             key={m.label}
             onClick={() => handleClick(m.label)}
-            className={`p-8 rounded-2xl border transition-all duration-300 hover:scale-105 text-center ${
+            className={`p-8 rounded-2xl transition-all duration-300 hover:scale-105 text-center ${
               data.mood === m.label
-                ? `${m.color} text-white shadow-lg`
-                : "bg-white hover:bg-gray-50"
+                ? `${m.color} text-white shadow-soft`
+                : "surface hover:bg-[var(--surface-2)]"
             }`}
           >
             <div className="text-4xl">{m.emoji}</div>
@@ -57,7 +57,7 @@ export default function MoodTracker({ data, setData }) {
 
       {/* Weekly Mood Preview */}
       {data.moodHistory?.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-md border">
+        <div className="surface card p-6">
           <h3 className="font-semibold mb-4">
             Weekly Mood Overview
           </h3>
@@ -66,9 +66,9 @@ export default function MoodTracker({ data, setData }) {
             {data.moodHistory.map((item, index) => (
               <div
                 key={index}
-                className="p-3 bg-indigo-50 rounded-lg"
+                className="p-3 accent-soft rounded-lg"
               >
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted">
                   {item.day}
                 </p>
                 <p className="text-xl">

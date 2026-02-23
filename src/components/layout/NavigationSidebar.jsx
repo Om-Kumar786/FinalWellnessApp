@@ -22,14 +22,14 @@ export default function NavigationSidebar({ activeTab, onTabChange }) {
   ];
 
   return (
-    <div className="h-screen w-64 bg-white border-r shadow-xl flex flex-col p-6">
+    <div className="h-screen w-64 bg-[var(--surface)] border-r border-[var(--border)] shadow-soft flex flex-col p-6">
 
       {/* Brand */}
       <div className="mb-10">
-        <h1 className="text-2xl font-bold bg-linear-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent tracking-tight">
+        <h1 className="text-2xl font-bold bg-linear-to-r from-[var(--accent)] to-[var(--accent-2)] bg-clip-text text-transparent tracking-tight">
           Pulse
         </h1>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-muted mt-1">
           Wellness Tracker
         </p>
       </div>
@@ -46,8 +46,8 @@ export default function NavigationSidebar({ activeTab, onTabChange }) {
               onClick={() => onTabChange(item.id)}
               className={`group relative flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-300 ${
                 isActive
-                  ? "bg-indigo-500 text-white shadow-md"
-                  : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  ? "bg-[var(--accent)] text-white shadow-soft"
+                  : "text-[var(--muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
               }`}
             >
               {/* Active Indicator Bar */}
@@ -73,20 +73,20 @@ export default function NavigationSidebar({ activeTab, onTabChange }) {
       </div>
 
       {/* Divider */}
-      <div className="border-t pt-6 mt-6">
+      <div className="border-t border-[var(--border)] pt-6 mt-6">
 
-        {/* User Section */}
-        <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl">
-          <div className="w-10 h-10 flex items-center justify-center bg-indigo-500 text-white rounded-full font-semibold">
-            {username.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <p className="text-sm font-medium">{username}</p>
-            <p className="text-xs text-gray-400">Active Member</p>
-          </div>
+      {/* User Section */}
+      <div className="flex items-center gap-3 bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
+        <div className="w-10 h-10 flex items-center justify-center bg-[var(--accent)] text-white rounded-full font-semibold">
+          {username.charAt(0).toUpperCase()}
         </div>
+        <div>
+          <p className="text-sm font-medium">{username}</p>
+          <p className="text-xs text-muted">Active Member</p>
+        </div>
+      </div>
 
-        <p className="text-xs text-gray-400 mt-6 text-center">
+        <p className="text-xs text-muted mt-6 text-center">
           © {new Date().getFullYear()} Pulse
         </p>
       </div>
