@@ -1,15 +1,17 @@
 import {
-  LayoutDashboard,
-  Heart,
-  Moon,
   Activity,
-  Target,
   Brain,
+  Heart,
+  LayoutDashboard,
+  Moon,
   Settings,
+  Target,
 } from "lucide-react";
 
-export default function NavigationSidebar({ activeTab, onTabChange }) {
-  const username = localStorage.getItem("user") || "User";
+export default function NavigationSidebar({ activeTab, onTabChange, currentUser }) {
+  const username = currentUser?.username || localStorage.getItem("user") || "User";
+  const role = currentUser?.role || "user";
+  const isAdmin = role === "admin";
 
   const items = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -22,20 +24,15 @@ export default function NavigationSidebar({ activeTab, onTabChange }) {
   ];
 
   return (
-    <div className="h-screen w-64 bg-[var(--surface)] border-r border-[var(--border)] shadow-soft flex flex-col p-6">
-
-      {/* Brand */}
+    <div className="flex h-screen w-64 flex-col border-r border-[var(--border)] bg-[var(--surface)] p-6 shadow-soft">
       <div className="mb-10">
-        <h1 className="text-2xl font-bold bg-linear-to-r from-[var(--accent)] to-[var(--accent-2)] bg-clip-text text-transparent tracking-tight">
+        <h1 className="bg-linear-to-r from-[var(--accent)] to-[var(--accent-2)] bg-clip-text text-2xl font-bold tracking-tight text-transparent">
           Pulse
         </h1>
-        <p className="text-xs text-muted mt-1">
-          Wellness Tracker
-        </p>
+        <p className="mt-1 text-xs text-muted">Wellness Tracker</p>
       </div>
 
-      {/* Navigation */}
-      <div className="space-y-2 flex-1">
+      <div className="flex-1 space-y-2">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -44,50 +41,36 @@ export default function NavigationSidebar({ activeTab, onTabChange }) {
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`group relative flex items-center gap-3 w-full px-4 py-3 rounded-xl transition-all duration-300 ${
+              className={`group relative flex w-full items-center gap-3 rounded-xl px-4 py-3 transition-all duration-300 ${
                 isActive
                   ? "bg-[var(--accent)] text-white shadow-soft"
                   : "text-[var(--muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
               }`}
             >
-              {/* Active Indicator Bar */}
               {isActive && (
-                <span className="absolute left-0 top-0 h-full w-1 bg-white rounded-r-full"></span>
+                <span className="absolute left-0 top-0 h-full w-1 rounded-r-full bg-white" />
               )}
 
-              <Icon
-                size={20}
-                className={`transition-all duration-300 ${
-                  isActive
-                    ? "scale-110"
-                    : "group-hover:scale-110"
-                }`}
-              />
-
-              <span className="font-medium">
-                {item.label}
-              </span>
+              <Icon size={20} className={isActive ? "scale-110" : "group-hover:scale-110"} />
+              <span className="font-medium">{item.label}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Divider */}
-      <div className="border-t border-[var(--border)] pt-6 mt-6">
-
-      {/* User Section */}
-      <div className="flex items-center gap-3 bg-[var(--surface-2)] p-3 rounded-xl border border-[var(--border)]">
-        <div className="w-10 h-10 flex items-center justify-center bg-[var(--accent)] text-white rounded-full font-semibold">
-          {username.charAt(0).toUpperCase()}
+      <div className="mt-6 border-t border-[var(--border)] pt-6">
+        <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] font-semibold text-white">
+            {username.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="text-sm font-medium">{username}</p>
+            <p className="text-xs text-muted">{isAdmin ? "Admin" : "Active Member"}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-medium">{username}</p>
-          <p className="text-xs text-muted">Active Member</p>
-        </div>
-      </div>
 
-        <p className="text-xs text-muted mt-6 text-center">
-          © {new Date().getFullYear()} Pulse
+        <p className="mt-6 text-center text-xs text-muted">
+          Copyright {new Date().getFullYear()} Pulse
         </p>
       </div>
     </div>

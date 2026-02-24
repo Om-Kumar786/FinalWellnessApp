@@ -1,20 +1,62 @@
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import NavigationSidebar from "./components/layout/NavigationSidebar";
-import WellnessDashboard from "./components/dashboard/WellnessDashboard";
-import MoodTracker from "./components/pages/MoodTracker";
-import SleepLog from "./components/pages/SleepLog";
-import ActivityPage from "./components/pages/ActivityPage";
-import GoalsPage from "./components/pages/GoalsPage";
-import MindfulnessPage from "./components/pages/MindfulnessPage";
-import SettingsPage from "./components/pages/SettingsPage";
 import LoginPage from "./components/pages/LoginPage";
 import LandingPage from "./components/pages/LandingPage";
 
+const WellnessDashboard = lazy(() => import("./components/dashboard/WellnessDashboard"));
+const MoodTracker = lazy(() => import("./components/pages/MoodTracker"));
+const SleepLog = lazy(() => import("./components/pages/SleepLog"));
+const ActivityPage = lazy(() => import("./components/pages/ActivityPage"));
+const GoalsPage = lazy(() => import("./components/pages/GoalsPage"));
+const MindfulnessPage = lazy(() => import("./components/pages/MindfulnessPage"));
+const SettingsPage = lazy(() => import("./components/pages/SettingsPage"));
+
+const parseJSON = (value, fallback) => {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const DEFAULT_REMINDERS = {
+  enabled: true,
+  mood: { enabled: true, time: "09:00" },
+  sleep: { enabled: true, time: "21:00" },
+  steps: { enabled: true, time: "18:00" },
+  mindfulness: { enabled: true, time: "20:00" },
+};
+
+const mergeReminderSettings = (saved) => ({
+  ...DEFAULT_REMINDERS,
+  ...saved,
+  mood: { ...DEFAULT_REMINDERS.mood, ...(saved?.mood || {}) },
+  sleep: { ...DEFAULT_REMINDERS.sleep, ...(saved?.sleep || {}) },
+  steps: { ...DEFAULT_REMINDERS.steps, ...(saved?.steps || {}) },
+  mindfulness: { ...DEFAULT_REMINDERS.mindfulness, ...(saved?.mindfulness || {}) },
+});
+
+const reminderMessages = {
+  mood: {
+    title: "Mood Check-in",
+    body: "Take 30 seconds to log your mood for today.",
+  },
+  sleep: {
+    title: "Sleep Log Reminder",
+    body: "Update your sleep hours before you wind down.",
+  },
+  steps: {
+    title: "Steps Goal Reminder",
+    body: "Quick check: update your steps progress now.",
+  },
+  mindfulness: {
+    title: "Mindfulness Reminder",
+    body: "Take a short breathing or meditation break.",
+  },
+};
+
 export default function App() {
-
-  /* ================= LOGIN STATE ================= */
-
   const getInitialTheme = () => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme) return savedTheme;
@@ -27,19 +69,44 @@ export default function App() {
   };
 
   const [theme, setTheme] = useState(getInitialTheme);
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedUser = parseJSON(localStorage.getItem("currentUser"), null);
+    if (savedUser?.username) return savedUser;
 
-  const [isLoggedIn, setIsLoggedIn] = useState(
-    localStorage.getItem("isLoggedIn") === "true"
-  );
+    const legacyUsername = localStorage.getItem("user");
+    if (localStorage.getItem("isLoggedIn") === "true" && legacyUsername) {
+      return { username: legacyUsername, role: "user" };
+    }
 
+    return null;
+  });
+
+  const isLoggedIn = Boolean(currentUser?.username);
   const [showLogin, setShowLogin] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [inAppReminder, setInAppReminder] = useState(null);
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
+    return Notification.permission;
+  });
 
-  /* ================= WELLNESS DATA ================= */
+  const reminderStorageKey = useMemo(
+    () => `reminderSettings_${currentUser?.username || "guest"}`,
+    [currentUser?.username],
+  );
+
+  const reminderSentStorageKey = useMemo(
+    () => `reminderSent_${currentUser?.username || "guest"}`,
+    [currentUser?.username],
+  );
+
+  const [reminders, setReminders] = useState(() => {
+    const saved = parseJSON(localStorage.getItem(reminderStorageKey), null);
+    return mergeReminderSettings(saved);
+  });
 
   const [wellnessData, setWellnessData] = useState(() => {
     const saved = localStorage.getItem("wellnessData");
-
     const defaultData = {
       mood: "Not Set",
       sleepHours: 0,
@@ -49,23 +116,20 @@ export default function App() {
       mindfulnessSessions: 0,
       moodHistory: [],
       sleepHistory: [],
-      goals: [], // ✅ IMPORTANT
+      goals: [],
     };
 
     if (!saved) return defaultData;
-
-    try {
-      return { ...defaultData, ...JSON.parse(saved) };
-    } catch {
-      return defaultData;
-    }
+    return { ...defaultData, ...parseJSON(saved, {}) };
   });
-
-  /* ================= SAVE DATA ================= */
 
   useEffect(() => {
     localStorage.setItem("wellnessData", JSON.stringify(wellnessData));
   }, [wellnessData]);
+
+  useEffect(() => {
+    localStorage.setItem(reminderStorageKey, JSON.stringify(reminders));
+  }, [reminders, reminderStorageKey]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -73,19 +137,97 @@ export default function App() {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  /* ================= LOGOUT ================= */
+  useEffect(() => {
+    if (!inAppReminder) return undefined;
+    const timerId = setTimeout(() => {
+      setInAppReminder(null);
+    }, 5500);
+
+    return () => clearTimeout(timerId);
+  }, [inAppReminder]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !reminders.enabled) return undefined;
+
+    const triggerReminder = (key) => {
+      const reminderContent = reminderMessages[key];
+      if (!reminderContent) return;
+
+      if (notificationPermission === "granted" && typeof window !== "undefined") {
+        new Notification(reminderContent.title, { body: reminderContent.body });
+      }
+
+      setInAppReminder({
+        id: `${key}-${Date.now()}`,
+        ...reminderContent,
+      });
+    };
+
+    const checkAndSendReminders = () => {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const today = now.toISOString().slice(0, 10);
+      const sentMap = parseJSON(localStorage.getItem(reminderSentStorageKey), {});
+      let changed = false;
+
+      ["mood", "sleep", "steps", "mindfulness"].forEach((key) => {
+        const item = reminders[key];
+        if (!item?.enabled || !item?.time) return;
+
+        const sentKey = `${today}_${key}`;
+        if (item.time === currentTime && !sentMap[sentKey]) {
+          triggerReminder(key);
+          sentMap[sentKey] = true;
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem(reminderSentStorageKey, JSON.stringify(sentMap));
+      }
+    };
+
+    checkAndSendReminders();
+    const timerId = setInterval(checkAndSendReminders, 30000);
+    return () => clearInterval(timerId);
+  }, [isLoggedIn, notificationPermission, reminderSentStorageKey, reminders]);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  };
+
+  const setReminderMaster = (enabled) => {
+    setReminders((prev) => ({ ...prev, enabled }));
+  };
+
+  const updateReminderItem = (key, patch) => {
+    setReminders((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        ...patch,
+      },
+    }));
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
-    setIsLoggedIn(false);
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("user");
+    setCurrentUser(null);
     setShowLogin(false);
+    setInAppReminder(null);
+    setReminders(mergeReminderSettings(parseJSON(localStorage.getItem("reminderSettings_guest"), null)));
   };
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
-
-  /* ================= LANDING + LOGIN FLOW ================= */
 
   if (!isLoggedIn) {
     return (
@@ -95,9 +237,11 @@ export default function App() {
           <LandingPage onLoginClick={() => setShowLogin(true)} />
         ) : (
           <LoginPage
-            onLogin={() => {
+            onLogin={(user) => {
               localStorage.setItem("isLoggedIn", "true");
-              setIsLoggedIn(true);
+              setCurrentUser(user);
+              const userReminderKey = `reminderSettings_${user.username}`;
+              setReminders(mergeReminderSettings(parseJSON(localStorage.getItem(userReminderKey), null)));
             }}
           />
         )}
@@ -105,66 +249,61 @@ export default function App() {
     );
   }
 
-  /* ================= MAIN APP ================= */
-
   return (
     <div className="flex min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <ThemeToggle theme={theme} onToggle={toggleTheme} />
+      {inAppReminder && <ReminderToast title={inAppReminder.title} body={inAppReminder.body} />}
 
-      {/* Sidebar */}
       <div className="w-64 border-r border-[var(--border)] bg-[var(--surface)]">
         <NavigationSidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          currentUser={currentUser}
         />
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 overflow-auto p-8 page-animate">
+        <Suspense fallback={<div className="text-muted">Loading...</div>}>
+          {activeTab === "dashboard" && (
+            <WellnessDashboard data={wellnessData} currentUser={currentUser} />
+          )}
 
-        {activeTab === "dashboard" && (
-          <WellnessDashboard data={wellnessData} />
-        )}
+          {activeTab === "mood" && (
+            <MoodTracker data={wellnessData} setData={setWellnessData} />
+          )}
 
-        {activeTab === "mood" && (
-          <MoodTracker
-            data={wellnessData}
-            setData={setWellnessData}
-          />
-        )}
+          {activeTab === "sleep" && (
+            <SleepLog data={wellnessData} setData={setWellnessData} />
+          )}
 
-        {activeTab === "sleep" && (
-          <SleepLog
-            data={wellnessData}
-            setData={setWellnessData}
-          />
-        )}
+          {activeTab === "activity" && (
+            <ActivityPage
+              key={currentUser?.username || "guest"}
+              data={wellnessData}
+              setData={setWellnessData}
+            />
+          )}
 
-        {activeTab === "activity" && (
-          <ActivityPage
-            data={wellnessData}
-            setData={setWellnessData}
-          />
-        )}
+          {activeTab === "goals" && (
+            <GoalsPage data={wellnessData} setData={setWellnessData} />
+          )}
 
-        {activeTab === "goals" && (
-          <GoalsPage
-            data={wellnessData}
-            setData={setWellnessData}
-          />
-        )}
+          {activeTab === "mindfulness" && (
+            <MindfulnessPage data={wellnessData} setData={setWellnessData} />
+          )}
 
-        {activeTab === "mindfulness" && (
-          <MindfulnessPage
-            data={wellnessData}
-            setData={setWellnessData}
-          />
-        )}
-
-        {activeTab === "settings" && (
-          <SettingsPage onLogout={handleLogout} />
-        )}
-
+          {activeTab === "settings" && (
+            <SettingsPage
+              onLogout={handleLogout}
+              currentUser={currentUser}
+              reminders={reminders}
+              notificationPermission={notificationPermission}
+              onRequestNotificationPermission={requestNotificationPermission}
+              onReminderMasterChange={setReminderMaster}
+              onReminderItemChange={updateReminderItem}
+            />
+          )}
+        </Suspense>
       </div>
     </div>
   );
@@ -181,5 +320,14 @@ function ThemeToggle({ theme, onToggle }) {
       {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
       {theme === "dark" ? "Light" : "Dark"}
     </button>
+  );
+}
+
+function ReminderToast({ title, body }) {
+  return (
+    <div className="fixed bottom-5 right-5 z-50 w-80 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-soft">
+      <p className="text-sm font-semibold">{title}</p>
+      <p className="mt-1 text-sm text-muted">{body}</p>
+    </div>
   );
 }

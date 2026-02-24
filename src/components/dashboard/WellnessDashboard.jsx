@@ -1,34 +1,37 @@
+import { useEffect, useState } from "react";
 import {
-  PieChart,
-  Pie,
+  CartesianGrid,
   Cell,
-  LineChart,
   Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
+import { motivationLines } from "../../data/motivationLines";
+import { healthTips } from "../../data/healthTips";
 
-export default function WellnessDashboard({ data }) {
-  const username = localStorage.getItem("user") || "User";
+export default function WellnessDashboard({ data, currentUser }) {
+  const username = currentUser?.username || localStorage.getItem("user") || "User";
   const today = new Date().toLocaleDateString();
+  const [lineIndex, setLineIndex] = useState(() => {
+    if (motivationLines.length === 0) return 0;
+    return new Date().getSeconds() % motivationLines.length;
+  });
+  const [tipIndex, setTipIndex] = useState(() => {
+    if (healthTips.length === 0) return 0;
+    return new Date().getSeconds() % healthTips.length;
+  });
 
   const moodHistory = data?.moodHistory || [];
   const sleepHistory = data?.sleepHistory || [];
   const goals = data?.goals || [];
+  const completed = goals.filter((g) => g.completed).length;
 
-  const completed = goals.filter(g => g.completed).length;
-
-  /* ================= WELLNESS SCORE ================= */
-
-  const wellnessScore =
-    (data.sleepHours >= 8 ? 25 : 10) +
-    (data.steps >= 8000 ? 25 : 10) +
-    (completed * 10);
-
-  /* ================= MOOD CALCULATION ================= */
+  const wellnessScore = (data.sleepHours >= 8 ? 25 : 10) + (data.steps >= 8000 ? 25 : 10) + completed * 10;
 
   const moodCount = {};
   moodHistory.forEach((item) => {
@@ -48,73 +51,66 @@ export default function WellnessDashboard({ data }) {
     color: moodColors[key],
   }));
 
-  /* ================= MOTIVATIONAL QUOTES ================= */
+  useEffect(() => {
+    if (motivationLines.length <= 1) return undefined;
+    const timerId = setInterval(() => {
+      setLineIndex((prev) => (prev + 1) % motivationLines.length);
+    }, 30000);
 
-  const quotes = [
-    "Small progress is still progress 💪",
-    "Consistency beats motivation 🔥",
-    "Take care of your body 🧠",
-    "You are stronger than you think 💙",
-  ];
+    return () => clearInterval(timerId);
+  }, []);
 
-  const randomQuote =
-    quotes[new Date().getDate() % quotes.length];
+  useEffect(() => {
+    if (healthTips.length <= 1) return undefined;
+    const timerId = setInterval(() => {
+      setTipIndex((prev) => (prev + 1) % healthTips.length);
+    }, 40000);
+
+    return () => clearInterval(timerId);
+  }, []);
+
+  const activeLine = motivationLines[lineIndex] || {
+    lang: "EN",
+    text: "Keep going, your future self will thank you.",
+  };
+  const activeTip = healthTips[tipIndex] || "Stay active, hydrated and consistent with sleep.";
 
   return (
-    <div className="max-w-7xl mx-auto p-8 space-y-10">
-
-      {/* ================= HEADER ================= */}
-      <div className="flex justify-between items-center">
+    <div className="mx-auto max-w-7xl space-y-10 p-8">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">
-            Welcome back, {username} 👋
-          </h1>
+          <h1 className="text-3xl font-semibold">Welcome back, {username}</h1>
           <p className="text-muted">{today}</p>
         </div>
 
-        <div className="surface shadow-soft px-5 py-2 rounded-full">
+        <div className="surface rounded-full px-5 py-2 shadow-soft">
           Wellness Score: <span className="font-semibold">{wellnessScore}/100</span>
         </div>
       </div>
 
-      {/* ================= MOTIVATIONAL QUOTE ================= */}
-      <div className="accent-soft p-6 rounded-xl">
-        <p className="font-medium accent-text">
-          "{randomQuote}"
+      <div className="accent-soft rounded-xl p-6">
+        <p className="accent-text mb-2 text-xs font-semibold uppercase tracking-wide">
+          {activeLine.lang}
         </p>
+        <p className="accent-text font-medium">"{activeLine.text}"</p>
       </div>
 
-      {/* ================= STAT CARDS ================= */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <StatCard
-          title="Mood"
-          value={data.mood || "Not Set"}
-          icon="😊"
-          color="from-green-400 to-emerald-500"
-        />
-        <StatCard
-          title="Sleep"
-          value={`${data.sleepHours || 0} hrs`}
-          icon="🌙"
-          color="from-indigo-400 to-purple-500"
-        />
-        <StatCard
-          title="Steps"
-          value={data.steps || 0}
-          icon="👟"
-          color="from-blue-400 to-cyan-500"
-        />
-        <StatCard
-          title="Stress"
-          value={data.stressLevel || "Low"}
-          icon="⚡"
-          color="from-red-400 to-orange-500"
-        />
+      <div className="surface card rounded-xl border border-[var(--border)] p-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Health Tip
+        </p>
+        <p className="text-sm font-medium text-[var(--text)]">{activeTip}</p>
       </div>
 
-      {/* ================= GOALS PREVIEW ================= */}
+      <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+        <StatCard title="Mood" value={data.mood || "Not Set"} icon="Mood" color="from-green-400 to-emerald-500" />
+        <StatCard title="Sleep" value={`${data.sleepHours || 0} hrs`} icon="Sleep" color="from-indigo-400 to-purple-500" />
+        <StatCard title="Steps" value={data.steps || 0} icon="Steps" color="from-blue-400 to-cyan-500" />
+        <StatCard title="Stress" value={data.stressLevel || "Low"} icon="Stress" color="from-red-400 to-orange-500" />
+      </div>
+
       <div className="surface card p-6">
-        <h3 className="font-semibold mb-3">Goal Progress</h3>
+        <h3 className="mb-3 font-semibold">Goal Progress</h3>
 
         {goals.length > 0 ? (
           <>
@@ -124,14 +120,9 @@ export default function WellnessDashboard({ data }) {
 
             <ul className="space-y-2">
               {goals.slice(0, 3).map((goal) => (
-                <li
-                  key={goal.id}
-                  className="flex justify-between items-center"
-                >
-                  <span className={goal.completed ? "line-through text-soft" : ""}>
-                    {goal.text}
-                  </span>
-                  {goal.completed && <span>✅</span>}
+                <li key={goal.id} className="flex items-center justify-between">
+                  <span className={goal.completed ? "line-through text-soft" : ""}>{goal.text}</span>
+                  {goal.completed && <span>Done</span>}
                 </li>
               ))}
             </ul>
@@ -141,26 +132,16 @@ export default function WellnessDashboard({ data }) {
         )}
       </div>
 
-      {/* ================= CHARTS ================= */}
-      <div className="grid lg:grid-cols-2 gap-8">
-
-        {/* Mood Distribution */}
-        <div className="surface card-lg p-6 hover:shadow-lg transition">
-          <h3 className="mb-4 font-semibold">
-            Mood Distribution
-          </h3>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div className="surface card-lg p-6 transition hover:shadow-lg">
+          <h3 className="mb-4 font-semibold">Mood Distribution</h3>
 
           {moodData.length === 0 ? (
             <p className="text-muted">No Data</p>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
-                <Pie
-                  data={moodData}
-                  dataKey="value"
-                  innerRadius={50}
-                  outerRadius={90}
-                >
+                <Pie data={moodData} dataKey="value" innerRadius={50} outerRadius={90}>
                   {moodData.map((entry, i) => (
                     <Cell key={i} fill={entry.color} />
                   ))}
@@ -180,11 +161,8 @@ export default function WellnessDashboard({ data }) {
           )}
         </div>
 
-        {/* Sleep Trends */}
-        <div className="surface card-lg p-6 hover:shadow-lg transition">
-          <h3 className="mb-4 font-semibold">
-            Sleep Trends
-          </h3>
+        <div className="surface card-lg p-6 transition hover:shadow-lg">
+          <h3 className="mb-4 font-semibold">Sleep Trends</h3>
 
           {sleepHistory.length === 0 ? (
             <p className="text-muted">No Data</p>
@@ -204,35 +182,25 @@ export default function WellnessDashboard({ data }) {
                   itemStyle={{ color: "var(--text)" }}
                   labelStyle={{ color: "var(--muted)" }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="hours"
-                  stroke="var(--accent)"
-                  strokeWidth={3}
-                />
+                <Line type="monotone" dataKey="hours" stroke="var(--accent)" strokeWidth={3} />
               </LineChart>
             </ResponsiveContainer>
           )}
         </div>
-
       </div>
     </div>
   );
 }
 
-/* ================= STAT CARD ================= */
-
 function StatCard({ title, value, icon, color }) {
   return (
-    <div
-      className={`bg-linear-to-r ${color} text-white rounded-2xl p-6 shadow-soft hover:scale-105 transition`}
-    >
-      <div className="flex justify-between items-center">
+    <div className={`bg-linear-to-r ${color} rounded-2xl p-6 text-white shadow-soft transition hover:scale-105`}>
+      <div className="flex items-center justify-between">
         <div>
           <p className="text-sm opacity-80">{title}</p>
-          <h3 className="text-2xl font-semibold mt-2">{value}</h3>
+          <h3 className="mt-2 text-2xl font-semibold">{value}</h3>
         </div>
-        <span className="text-3xl">{icon}</span>
+        <span className="text-sm uppercase tracking-wide opacity-90">{icon}</span>
       </div>
     </div>
   );
