@@ -319,11 +319,11 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[var(--bg)] text-[var(--text)]">
+    <div className="flex h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">
       <ThemeToggle theme={theme} onToggle={toggleTheme} />
       {inAppReminder && <ReminderToast title={inAppReminder.title} body={inAppReminder.body} />}
 
-      <div className="w-64 border-r border-[var(--border)] bg-[var(--surface)]">
+      <div className="w-64 shrink-0 border-r border-[var(--border)] bg-[var(--surface)]">
         <NavigationSidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -331,7 +331,7 @@ export default function App() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto p-8 page-animate">
+      <div className="flex-1 overflow-y-auto p-8 page-animate">
         <Suspense fallback={<div className="text-muted">Loading...</div>}>
           {activeTab === "dashboard" && (
             <WellnessDashboard
