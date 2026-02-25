@@ -11,6 +11,8 @@ const ActivityPage = lazy(() => import("./components/pages/ActivityPage"));
 const GoalsPage = lazy(() => import("./components/pages/GoalsPage"));
 const MindfulnessPage = lazy(() => import("./components/pages/MindfulnessPage"));
 const SettingsPage = lazy(() => import("./components/pages/SettingsPage"));
+const AdminPage = lazy(() => import("./components/pages/AdminPage"));
+const CheckInPage = lazy(() => import("./components/pages/CheckInPage"));
 
 const parseJSON = (value, fallback) => {
   try {
@@ -28,14 +30,54 @@ const DEFAULT_REMINDERS = {
   mindfulness: { enabled: true, time: "20:00" },
 };
 
-const mergeReminderSettings = (saved) => ({
-  ...DEFAULT_REMINDERS,
+const DEFAULT_WELLNESS_DATA = {
+  mood: "Not Set",
+  sleepHours: 0,
+  steps: 0,
+  stressLevel: "Low",
+  goalsCompleted: 0,
+  mindfulnessSessions: 0,
+  moodHistory: [],
+  sleepHistory: [],
+  goals: [],
+  energyLevel: "Medium",
+  checkInHistory: [],
+  weeklyReflection: null,
+  activeChallenges: [],
+};
+
+const mergeReminderSettings = (saved, defaults = DEFAULT_REMINDERS) => ({
+  ...defaults,
   ...saved,
-  mood: { ...DEFAULT_REMINDERS.mood, ...(saved?.mood || {}) },
-  sleep: { ...DEFAULT_REMINDERS.sleep, ...(saved?.sleep || {}) },
-  steps: { ...DEFAULT_REMINDERS.steps, ...(saved?.steps || {}) },
-  mindfulness: { ...DEFAULT_REMINDERS.mindfulness, ...(saved?.mindfulness || {}) },
+  mood: { ...defaults.mood, ...(saved?.mood || {}) },
+  sleep: { ...defaults.sleep, ...(saved?.sleep || {}) },
+  steps: { ...defaults.steps, ...(saved?.steps || {}) },
+  mindfulness: { ...defaults.mindfulness, ...(saved?.mindfulness || {}) },
 });
+
+const getReminderDefaults = () => {
+  const adminConfig = parseJSON(localStorage.getItem("adminConfig"), {});
+  return mergeReminderSettings(adminConfig?.defaultReminders || DEFAULT_REMINDERS);
+};
+
+const appendReminderFailure = (username, reminderType, reason) => {
+  const failureMap = parseJSON(localStorage.getItem("reminderFailures"), {});
+  const userKey = username || "guest";
+  const failureList = Array.isArray(failureMap[userKey]) ? failureMap[userKey] : [];
+  const nextMap = {
+    ...failureMap,
+    [userKey]: [
+      ...failureList,
+      {
+        id: `${userKey}-${reminderType}-${Date.now()}`,
+        reminderType,
+        reason,
+        at: new Date().toISOString(),
+      },
+    ].slice(-100),
+  };
+  localStorage.setItem("reminderFailures", JSON.stringify(nextMap));
+};
 
 const reminderMessages = {
   mood: {
@@ -100,36 +142,31 @@ export default function App() {
     [currentUser?.username],
   );
 
+  const wellnessStorageKey = useMemo(
+    () => `wellnessData_${currentUser?.username || "guest"}`,
+    [currentUser?.username],
+  );
+
   const [reminders, setReminders] = useState(() => {
     const saved = parseJSON(localStorage.getItem(reminderStorageKey), null);
-    return mergeReminderSettings(saved);
+    return mergeReminderSettings(saved, getReminderDefaults());
   });
 
   const [wellnessData, setWellnessData] = useState(() => {
-    const saved = localStorage.getItem("wellnessData");
-    const defaultData = {
-      mood: "Not Set",
-      sleepHours: 0,
-      steps: 0,
-      stressLevel: "Low",
-      goalsCompleted: 0,
-      mindfulnessSessions: 0,
-      moodHistory: [],
-      sleepHistory: [],
-      goals: [],
-    };
-
-    if (!saved) return defaultData;
-    return { ...defaultData, ...parseJSON(saved, {}) };
+    const scopedKey = `wellnessData_${currentUser?.username || "guest"}`;
+    const saved = localStorage.getItem(scopedKey) || localStorage.getItem("wellnessData");
+    if (!saved) return DEFAULT_WELLNESS_DATA;
+    return { ...DEFAULT_WELLNESS_DATA, ...parseJSON(saved, {}) };
   });
 
   useEffect(() => {
-    localStorage.setItem("wellnessData", JSON.stringify(wellnessData));
-  }, [wellnessData]);
+    localStorage.setItem(wellnessStorageKey, JSON.stringify(wellnessData));
+  }, [wellnessData, wellnessStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(reminderStorageKey, JSON.stringify(reminders));
   }, [reminders, reminderStorageKey]);
+
 
   useEffect(() => {
     const root = document.documentElement;
@@ -154,7 +191,13 @@ export default function App() {
       if (!reminderContent) return;
 
       if (notificationPermission === "granted" && typeof window !== "undefined") {
-        new Notification(reminderContent.title, { body: reminderContent.body });
+        try {
+          new Notification(reminderContent.title, { body: reminderContent.body });
+        } catch {
+          appendReminderFailure(currentUser?.username, key, "notification_error");
+        }
+      } else {
+        appendReminderFailure(currentUser?.username, key, `permission_${notificationPermission}`);
       }
 
       setInAppReminder({
@@ -190,7 +233,7 @@ export default function App() {
     checkAndSendReminders();
     const timerId = setInterval(checkAndSendReminders, 30000);
     return () => clearInterval(timerId);
-  }, [isLoggedIn, notificationPermission, reminderSentStorageKey, reminders]);
+  }, [currentUser?.username, isLoggedIn, notificationPermission, reminderSentStorageKey, reminders]);
 
   const requestNotificationPermission = async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -199,6 +242,7 @@ export default function App() {
     }
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
+    localStorage.setItem(`notificationPermission_${currentUser?.username || "guest"}`, permission);
   };
 
   const setReminderMaster = (enabled) => {
@@ -215,6 +259,23 @@ export default function App() {
     }));
   };
 
+  const loadWellnessForUser = (username) => {
+    const key = `wellnessData_${username || "guest"}`;
+    const saved = localStorage.getItem(key) || localStorage.getItem("wellnessData");
+    return {
+      ...DEFAULT_WELLNESS_DATA,
+      ...parseJSON(saved, {}),
+    };
+  };
+
+  const loadReminderForUser = (username) => {
+    const key = `reminderSettings_${username || "guest"}`;
+    return mergeReminderSettings(
+      parseJSON(localStorage.getItem(key), null),
+      getReminderDefaults(),
+    );
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("currentUser");
@@ -222,7 +283,13 @@ export default function App() {
     setCurrentUser(null);
     setShowLogin(false);
     setInAppReminder(null);
-    setReminders(mergeReminderSettings(parseJSON(localStorage.getItem("reminderSettings_guest"), null)));
+    setReminders(loadReminderForUser("guest"));
+    setWellnessData(loadWellnessForUser("guest"));
+    setNotificationPermission(
+      typeof window === "undefined" || !("Notification" in window)
+        ? "unsupported"
+        : Notification.permission,
+    );
   };
 
   const toggleTheme = () => {
@@ -240,8 +307,10 @@ export default function App() {
             onLogin={(user) => {
               localStorage.setItem("isLoggedIn", "true");
               setCurrentUser(user);
-              const userReminderKey = `reminderSettings_${user.username}`;
-              setReminders(mergeReminderSettings(parseJSON(localStorage.getItem(userReminderKey), null)));
+              setReminders(loadReminderForUser(user.username));
+              setWellnessData(loadWellnessForUser(user.username));
+              const savedPermission = localStorage.getItem(`notificationPermission_${user.username}`);
+              setNotificationPermission(savedPermission || Notification.permission);
             }}
           />
         )}
@@ -265,11 +334,19 @@ export default function App() {
       <div className="flex-1 overflow-auto p-8 page-animate">
         <Suspense fallback={<div className="text-muted">Loading...</div>}>
           {activeTab === "dashboard" && (
-            <WellnessDashboard data={wellnessData} currentUser={currentUser} />
+            <WellnessDashboard
+              data={wellnessData}
+              setData={setWellnessData}
+              currentUser={currentUser}
+            />
           )}
 
           {activeTab === "mood" && (
             <MoodTracker data={wellnessData} setData={setWellnessData} />
+          )}
+
+          {activeTab === "checkin" && (
+            <CheckInPage data={wellnessData} setData={setWellnessData} />
           )}
 
           {activeTab === "sleep" && (
@@ -302,6 +379,10 @@ export default function App() {
               onReminderMasterChange={setReminderMaster}
               onReminderItemChange={updateReminderItem}
             />
+          )}
+
+          {activeTab === "admin" && currentUser?.role === "admin" && (
+            <AdminPage currentUser={currentUser} />
           )}
         </Suspense>
       </div>

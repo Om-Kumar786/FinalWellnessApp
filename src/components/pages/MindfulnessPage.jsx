@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-const SOUND_FEEDBACK_MS = 1200;
-const BREATH_PHASE_SECONDS = 6;
 const BREATH_TICK_MS = 100;
-const PHASE_TICKS = (BREATH_PHASE_SECONDS * 1000) / BREATH_TICK_MS;
 
 const ambientTracks = [
   {
@@ -28,316 +25,554 @@ const ambientTracks = [
   },
 ];
 
+const userStates = ["Stressed", "Distracted", "Tired", "Calm"];
+
+const journeyTemplates = [
+  { id: "reset-2", title: "2-Min Reset", minutes: 2, for: "Stressed" },
+  { id: "focus-5", title: "Before Exam Focus", minutes: 5, for: "Distracted" },
+  { id: "sleep-7", title: "Pre-sleep Unwind", minutes: 7, for: "Tired" },
+  { id: "maintain-4", title: "Calm Maintenance", minutes: 4, for: "Calm" },
+];
+
+const breathingPatterns = {
+  "4-4": [
+    { phase: "inhale", seconds: 4 },
+    { phase: "exhale", seconds: 4 },
+  ],
+  "4-7-8": [
+    { phase: "inhale", seconds: 4 },
+    { phase: "hold", seconds: 7 },
+    { phase: "exhale", seconds: 8 },
+  ],
+  box: [
+    { phase: "inhale", seconds: 4 },
+    { phase: "hold", seconds: 4 },
+    { phase: "exhale", seconds: 4 },
+    { phase: "hold", seconds: 4 },
+  ],
+};
+
+const microPrompts = [
+  "Relax your shoulders.",
+  "Unclench your jaw.",
+  "Soften your gaze.",
+  "Slow your exhale.",
+  "Let your breath settle.",
+];
+
+const reflectionChoices = ["Lighter", "Focused", "Still stressed", "Sleepy", "Calm"];
+
+const formatClock = (secondsLeft) => {
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+};
+
+const getSuggestedJourney = (state) => {
+  return journeyTemplates.find((journey) => journey.for === state) || journeyTemplates[0];
+};
+
+const getRecommendation = ({ selectedState, stressDelta, focusDelta, sessionsThisWeek }) => {
+  if (selectedState === "Stressed" || stressDelta < 0) {
+    return "Try 4-7-8 breathing for 5 minutes tonight. Longer exhale can help downshift stress.";
+  }
+  if (selectedState === "Distracted" || focusDelta > 0) {
+    return "You respond well to short focus sessions. Repeat a 2-5 minute reset before demanding tasks.";
+  }
+  if (selectedState === "Tired") {
+    return "Choose pre-sleep unwind sessions and reduce late screen stimulation.";
+  }
+  if (sessionsThisWeek >= 4) {
+    return "Strong consistency this week. Keep your current routine and lock your session timing.";
+  }
+  return "Build momentum with one short mindfulness session daily at the same time.";
+};
+
 export default function MindfulnessPage({ data, setData }) {
+  const [selectedState, setSelectedState] = useState("Calm");
   const [secondsLeft, setSecondsLeft] = useState(600);
   const [isRunning, setIsRunning] = useState(false);
-  const [activeTrackId, setActiveTrackId] = useState(null);
-  const [trackStatus, setTrackStatus] = useState({});
+  const [journeyId, setJourneyId] = useState("maintain-4");
+  const [stressBefore, setStressBefore] = useState(5);
+  const [stressAfter, setStressAfter] = useState(5);
+  const [focusBefore, setFocusBefore] = useState(5);
+  const [focusAfter, setFocusAfter] = useState(5);
+  const [reflection, setReflection] = useState("");
+  const [reflectionNote, setReflectionNote] = useState("");
+
   const [breathingActive, setBreathingActive] = useState(false);
-  const [breathingTick, setBreathingTick] = useState(0);
+  const [breathingPattern, setBreathingPattern] = useState("4-4");
   const [breathingDurationMinutes, setBreathingDurationMinutes] = useState(2);
   const [breathingTimeLeftMs, setBreathingTimeLeftMs] = useState(120000);
+  const [breathTickInPhase, setBreathTickInPhase] = useState(0);
+  const [breathPhaseIndex, setBreathPhaseIndex] = useState(0);
 
-  const intervalRef = useRef(null);
-  const breathingIntervalRef = useRef(null);
-  const audioRef = useRef(null);
-  const clearTimersRef = useRef({});
+  const [trackPlayback, setTrackPlayback] = useState(() =>
+    ambientTracks.reduce((map, track) => ({ ...map, [track.id]: false }), {}),
+  );
+  const [trackVolume, setTrackVolume] = useState(() =>
+    ambientTracks.reduce((map, track) => ({ ...map, [track.id]: 40 }), {}),
+  );
+
+  const timerRef = useRef(null);
+  const breathingTimerRef = useRef(null);
+  const audioRefs = useRef({});
+
+  const mindfulnessHistory = useMemo(
+    () => data?.mindfulnessHistory || [],
+    [data?.mindfulnessHistory],
+  );
+  const sessionsThisWeek = mindfulnessHistory.length;
+  const recommendedJourney = getSuggestedJourney(selectedState);
+  const selectedJourney =
+    journeyTemplates.find((journey) => journey.id === journeyId) || journeyTemplates[0];
 
   useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current);
-            setIsRunning(false);
+    if (!isRunning) return undefined;
 
-            if (setData) {
-              setData((prevData) => ({
-                ...prevData,
-                mindfulnessSessions: (prevData.mindfulnessSessions || 0) + 1,
-              }));
-            }
+    timerRef.current = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          setIsRunning(false);
+          const sessionLog = {
+            at: new Date().toISOString(),
+            journeyId,
+            state: selectedState,
+            durationMinutes: selectedJourney.minutes,
+          };
+          setData((prevData) => ({
+            ...prevData,
+            mindfulnessSessions: (prevData.mindfulnessSessions || 0) + 1,
+            mindfulnessHistory: [...(prevData.mindfulnessHistory || []), sessionLog].slice(-60),
+          }));
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => clearInterval(intervalRef.current);
-  }, [isRunning, setData]);
+    return () => clearInterval(timerRef.current);
+  }, [isRunning, journeyId, selectedJourney.minutes, selectedState, setData]);
 
   useEffect(() => {
     if (!breathingActive) {
-      clearInterval(breathingIntervalRef.current);
+      clearInterval(breathingTimerRef.current);
       return undefined;
     }
 
-    breathingIntervalRef.current = setInterval(() => {
-      setBreathingTick((prev) => prev + 1);
+    const activePattern = breathingPatterns[breathingPattern];
+    const activePhase = activePattern[breathPhaseIndex];
+    const activePhaseTicks = (activePhase.seconds * 1000) / BREATH_TICK_MS;
 
+    breathingTimerRef.current = setInterval(() => {
+      setBreathTickInPhase((prev) => {
+        const next = prev + 1;
+        if (next >= activePhaseTicks) {
+          setBreathPhaseIndex((phasePrev) => (phasePrev + 1) % activePattern.length);
+          return 0;
+        }
+        return next;
+      });
       setBreathingTimeLeftMs((prev) => {
         if (prev <= BREATH_TICK_MS) {
-          clearInterval(breathingIntervalRef.current);
+          clearInterval(breathingTimerRef.current);
           setBreathingActive(false);
-          setBreathingTick(0);
+          setBreathTickInPhase(0);
           return 0;
         }
         return prev - BREATH_TICK_MS;
       });
     }, BREATH_TICK_MS);
 
-    return () => clearInterval(breathingIntervalRef.current);
-  }, [breathingActive]);
+    return () => clearInterval(breathingTimerRef.current);
+  }, [breathPhaseIndex, breathingActive, breathingPattern]);
 
   useEffect(() => {
-    const timers = clearTimersRef.current;
-    const audioElement = audioRef.current;
-    const breathingTimer = breathingIntervalRef.current;
-
+    const audios = audioRefs.current;
     return () => {
-      Object.values(timers).forEach((timerId) => {
-        clearTimeout(timerId);
+      clearInterval(timerRef.current);
+      clearInterval(breathingTimerRef.current);
+      Object.values(audios).forEach((audio) => {
+        if (!audio) return;
+        audio.pause();
       });
-      if (audioElement) {
-        audioElement.pause();
-      }
-      clearInterval(breathingTimer);
     };
   }, []);
 
-  const formatTime = () => {
-    const mins = Math.floor(secondsLeft / 60);
-    const secs = secondsLeft % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
+  const currentPattern = breathingPatterns[breathingPattern];
+  const currentPhase = currentPattern[breathPhaseIndex];
+  const phaseTicks = (currentPhase.seconds * 1000) / BREATH_TICK_MS;
+  const phaseProgress = Math.min(breathTickInPhase / Math.max(phaseTicks - 1, 1), 1);
+  const circleSize =
+    currentPhase.phase === "inhale"
+      ? 50 + 120 * phaseProgress
+      : currentPhase.phase === "exhale"
+        ? 170 - 120 * phaseProgress
+        : 110;
 
-  const setTime = (minutes) => {
-    setSecondsLeft(minutes * 60);
-    setIsRunning(false);
-  };
+  const activePromptIndex = useMemo(() => {
+    if (!isRunning) return 0;
+    return (Math.floor((selectedJourney.minutes * 60 - secondsLeft) / 20) + breathPhaseIndex) % microPrompts.length;
+  }, [breathPhaseIndex, isRunning, secondsLeft, selectedJourney.minutes]);
 
-  const resetTimer = () => {
-    setSecondsLeft(600);
-    setIsRunning(false);
-  };
+  const stressDelta = stressAfter - stressBefore;
+  const focusDelta = focusAfter - focusBefore;
+  const recommendation = getRecommendation({
+    selectedState,
+    stressDelta,
+    focusDelta,
+    sessionsThisWeek,
+  });
 
-  const setStoppedState = (trackId) => {
-    if (!trackId) return;
+  const todayKey = new Date().toLocaleDateString("en-US", { weekday: "short" });
+  const streak = useMemo(() => {
+    const days = [...new Set(mindfulnessHistory.map((entry) => entry.at).filter(Boolean).map((dateText) => {
+      const d = new Date(dateText);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    }))].sort((a, b) => b - a);
 
-    if (clearTimersRef.current[trackId]) {
-      clearTimeout(clearTimersRef.current[trackId]);
+    let count = 0;
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    for (let i = 0; i < days.length; i += 1) {
+      if (days[i] === cursor.getTime()) {
+        count += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      } else if (days[i] < cursor.getTime()) {
+        break;
+      }
     }
+    return count;
+  }, [mindfulnessHistory]);
 
-    setTrackStatus((prev) => ({ ...prev, [trackId]: "stopped" }));
-
-    clearTimersRef.current[trackId] = setTimeout(() => {
-      setTrackStatus((prev) => ({ ...prev, [trackId]: "default" }));
-      clearTimersRef.current[trackId] = null;
-    }, SOUND_FEEDBACK_MS);
+  const applyJourney = (journey) => {
+    setJourneyId(journey.id);
+    setSecondsLeft(journey.minutes * 60);
+    setIsRunning(false);
   };
 
-  const playTrack = async (track) => {
-    if (!audioRef.current) return;
-
-    const previouslyActive = activeTrackId;
-
-    if (previouslyActive === track.id) {
-      audioRef.current.pause();
-      setActiveTrackId(null);
-      setStoppedState(track.id);
+  const toggleTrack = async (trackId) => {
+    const audio = audioRefs.current[trackId];
+    if (!audio) return;
+    if (trackPlayback[trackId]) {
+      audio.pause();
+      setTrackPlayback((prev) => ({ ...prev, [trackId]: false }));
       return;
     }
-
-    if (previouslyActive) {
-      audioRef.current.pause();
-      setStoppedState(previouslyActive);
-    }
-
-    audioRef.current.src = track.src;
-    audioRef.current.currentTime = 0;
-
     try {
-      await audioRef.current.play();
-      setActiveTrackId(track.id);
-      setTrackStatus((prev) => ({ ...prev, [track.id]: "playing" }));
+      await audio.play();
+      setTrackPlayback((prev) => ({ ...prev, [trackId]: true }));
     } catch {
-      setActiveTrackId(null);
-      setStoppedState(track.id);
+      setTrackPlayback((prev) => ({ ...prev, [trackId]: false }));
     }
+  };
+
+  const updateVolume = (trackId, value) => {
+    const nextVolume = Number(value);
+    const audio = audioRefs.current[trackId];
+    if (audio) {
+      audio.volume = nextVolume / 100;
+    }
+    setTrackVolume((prev) => ({ ...prev, [trackId]: nextVolume }));
   };
 
   const toggleBreathing = () => {
     if (breathingActive) {
       setBreathingActive(false);
-      setBreathingTick(0);
+      setBreathTickInPhase(0);
+      setBreathPhaseIndex(0);
       setBreathingTimeLeftMs(breathingDurationMinutes * 60 * 1000);
       return;
     }
-    setBreathingTick(0);
+    setBreathTickInPhase(0);
+    setBreathPhaseIndex(0);
     setBreathingTimeLeftMs(breathingDurationMinutes * 60 * 1000);
     setBreathingActive(true);
   };
 
-  const setBreathingDuration = (minutes) => {
-    setBreathingDurationMinutes(minutes);
-    if (!breathingActive) {
-      setBreathingTimeLeftMs(minutes * 60 * 1000);
-    }
+  const saveReflection = () => {
+    if (!reflection && !reflectionNote.trim()) return;
+    setData((prev) => ({
+      ...prev,
+      mindfulnessReflection: {
+        day: todayKey,
+        feeling: reflection,
+        note: reflectionNote.trim(),
+        at: new Date().toISOString(),
+      },
+    }));
   };
-
-  const formatBreathingTime = () => {
-    const totalSeconds = Math.ceil(breathingTimeLeftMs / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
-
-  const breathingPhase =
-    Math.floor(breathingTick / PHASE_TICKS) % 2 === 0 ? "inhale" : "exhale";
-  const phaseTick = breathingTick % PHASE_TICKS;
-  const phaseProgress = phaseTick / (PHASE_TICKS - 1);
-  const phaseSecondsLeft = Math.ceil(((PHASE_TICKS - phaseTick) * BREATH_TICK_MS) / 1000);
-  const innerSize = breathingPhase === "inhale" ? 170 * phaseProgress : 170 * (1 - phaseProgress);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 p-8">
+    <div className="mx-auto max-w-6xl space-y-8 p-8">
       <h1 className="text-3xl font-semibold">Mindfulness and Meditation</h1>
 
-      <div className="surface card space-y-8 p-10 text-center">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="surface card space-y-4 p-6">
+          <h2 className="text-lg font-semibold">Choose Your Current State</h2>
+          <div className="flex flex-wrap gap-2">
+            {userStates.map((state) => (
+              <button
+                key={state}
+                type="button"
+                onClick={() => setSelectedState(state)}
+                className={`rounded-full border px-3 py-1 text-sm ${
+                  selectedState === state
+                    ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                    : "border-[var(--border)] bg-[var(--surface-2)]"
+                }`}
+              >
+                {state}
+              </button>
+            ))}
+          </div>
+          <div className="rounded-lg accent-soft p-3 text-sm">
+            Suggested session: <span className="font-semibold">{recommendedJourney.title}</span> (
+            {recommendedJourney.minutes} min)
+          </div>
+        </section>
+
+        <section className="surface card space-y-4 p-6">
+          <h2 className="text-lg font-semibold">Session Journeys</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {journeyTemplates.map((journey) => (
+              <button
+                key={journey.id}
+                type="button"
+                onClick={() => applyJourney(journey)}
+                className={`rounded-xl border px-3 py-2 text-left text-sm ${
+                  journeyId === journey.id
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                    : "border-[var(--border)] bg-[var(--surface-2)]"
+                }`}
+              >
+                <p className="font-medium">{journey.title}</p>
+                <p className="text-xs text-muted">{journey.minutes} min</p>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <div className="surface card space-y-6 p-8 text-center">
         <h2 className="text-sm tracking-wide text-muted">Meditation Timer</h2>
-
-        <div className="accent-text text-6xl font-bold">{formatTime()}</div>
-
+        <div className="accent-text text-6xl font-bold">{formatClock(secondsLeft)}</div>
         <p className="text-muted">Sessions completed: {data?.mindfulnessSessions || 0}</p>
-
-        <div className="flex flex-wrap justify-center gap-4">
-          {[5, 10, 15, 20, 30].map((min) => (
-            <button
-              key={min}
-              onClick={() => setTime(min)}
-              className="rounded-lg border border-[var(--border)] px-4 py-2 transition hover:bg-[var(--surface-2)]"
-            >
-              {min} min
-            </button>
-          ))}
-        </div>
-
+        <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+          Prompt: {microPrompts[activePromptIndex]}
+        </p>
         <div className="flex justify-center gap-4">
           <button
+            type="button"
             onClick={() => setIsRunning(true)}
-            className="btn-primary rounded-lg px-6 py-2 transition hover:brightness-110"
+            className="btn-primary rounded-lg px-6 py-2"
           >
             Start
           </button>
-
           <button
-            onClick={resetTimer}
-            className="btn-ghost rounded-lg px-6 py-2 transition hover:bg-[var(--surface-2)]"
+            type="button"
+            onClick={() => {
+              setIsRunning(false);
+              setSecondsLeft(selectedJourney.minutes * 60);
+            }}
+            className="btn-ghost rounded-lg px-6 py-2"
           >
             Reset
           </button>
         </div>
       </div>
 
-      <div className="surface card space-y-6 p-8">
-        <h3 className="text-lg font-semibold">Ambient Sounds</h3>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="surface card space-y-4 p-6">
+          <h3 className="text-lg font-semibold">Before and After Check-in</h3>
+          <SliderRow label="Stress before" value={stressBefore} onChange={setStressBefore} />
+          <SliderRow label="Stress after" value={stressAfter} onChange={setStressAfter} />
+          <SliderRow label="Focus before" value={focusBefore} onChange={setFocusBefore} />
+          <SliderRow label="Focus after" value={focusAfter} onChange={setFocusAfter} />
+          <div className="rounded-lg accent-soft p-3 text-sm">
+            Stress change: {stressDelta > 0 ? "+" : ""}{stressDelta} | Focus change:{" "}
+            {focusDelta > 0 ? "+" : ""}{focusDelta}
+          </div>
+        </section>
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {ambientTracks.map((track) => (
-            <SoundButton
-              key={track.id}
-              label={track.label}
-              onClick={() => playTrack(track)}
-              status={trackStatus[track.id] || "default"}
-              isPlaying={activeTrackId === track.id}
-            />
-          ))}
-        </div>
+        <section className="surface card space-y-4 p-6">
+          <h3 className="text-lg font-semibold">Streak and Rewards</h3>
+          <p className="text-sm">Current streak: <span className="font-semibold">{streak}</span> day(s)</p>
+          <p className="text-sm">This week sessions: <span className="font-semibold">{sessionsThisWeek}</span></p>
+          <div className="rounded-lg border border-emerald-400 bg-emerald-50 p-3 text-sm text-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-200">
+            {streak >= 3
+              ? "Consistency badge unlocked. Keep your routine."
+              : "Complete sessions on consecutive days to unlock your consistency badge."}
+          </div>
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm">
+            Personalized recommendation: {recommendation}
+          </div>
+        </section>
       </div>
 
-      <div className="surface card space-y-6 p-8 text-center">
-        <h3 className="text-lg font-semibold">Breathing Mini Tool</h3>
-        <p className="text-sm text-muted">Session time left: {formatBreathingTime()}</p>
-        <p className="text-base font-semibold text-[var(--text)]">
-          {breathingPhase === "inhale" ? "Inhale" : "Exhale"} ({phaseSecondsLeft}s)
-        </p>
-        <p className="text-sm text-muted">
-          {breathingPhase === "inhale" ? "Breathe in slowly" : "Release your breath slowly"}
-        </p>
+      <section className="surface card space-y-4 p-6">
+        <h3 className="text-lg font-semibold">Ambient Sound Mixer</h3>
+        <div className="grid gap-3 md:grid-cols-2">
+          {ambientTracks.map((track) => (
+            <div key={track.id} className="rounded-lg border border-[var(--border)] p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">{track.label}</p>
+                <button
+                  type="button"
+                  onClick={() => toggleTrack(track.id)}
+                  className="rounded-md border border-[var(--border)] px-3 py-1 text-xs"
+                >
+                  {trackPlayback[track.id] ? "Pause" : "Play"}
+                </button>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={trackVolume[track.id]}
+                onChange={(e) => updateVolume(track.id, e.target.value)}
+                className="mt-2 w-full"
+              />
+              <audio
+                ref={(node) => {
+                  audioRefs.current[track.id] = node;
+                }}
+                src={track.src}
+                loop
+                preload="none"
+              />
+            </div>
+          ))}
+        </div>
+      </section>
 
-        <div className="flex flex-wrap justify-center gap-3">
-          {[1, 2, 5].map((min) => (
+      <section className="surface card space-y-5 p-8 text-center">
+        <h3 className="text-lg font-semibold">Adaptive Breathing Coach</h3>
+        <div className="flex flex-wrap justify-center gap-2">
+          {Object.keys(breathingPatterns).map((patternKey) => (
             <button
-              key={min}
+              key={patternKey}
               type="button"
               disabled={breathingActive}
-              onClick={() => setBreathingDuration(min)}
-              className={`rounded-lg border px-4 py-2 text-sm ${
-                breathingDurationMinutes === min
+              onClick={() => setBreathingPattern(patternKey)}
+              className={`rounded-full border px-3 py-1 text-sm ${
+                breathingPattern === patternKey
                   ? "border-[var(--accent)] bg-[var(--accent)] text-white"
                   : "border-[var(--border)]"
-              } ${breathingActive ? "cursor-not-allowed opacity-50" : "hover:bg-[var(--surface-2)]"}`}
+              } ${breathingActive ? "cursor-not-allowed opacity-50" : ""}`}
             >
-              {min} min
+              {patternKey}
             </button>
           ))}
         </div>
 
+        <div className="flex flex-wrap justify-center gap-3">
+          {[1, 2, 5].map((minutes) => (
+            <button
+              key={minutes}
+              type="button"
+              disabled={breathingActive}
+              onClick={() => {
+                setBreathingDurationMinutes(minutes);
+                if (!breathingActive) setBreathingTimeLeftMs(minutes * 60 * 1000);
+              }}
+              className={`rounded-lg border px-4 py-2 text-sm ${
+                breathingDurationMinutes === minutes
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                  : "border-[var(--border)]"
+              } ${breathingActive ? "cursor-not-allowed opacity-50" : "hover:bg-[var(--surface-2)]"}`}
+            >
+              {minutes} min
+            </button>
+          ))}
+        </div>
+
+        <p className="text-sm text-muted">
+          Phase: {currentPhase.phase.toUpperCase()} ({currentPhase.seconds}s) | Time left:{" "}
+          {formatClock(Math.ceil(breathingTimeLeftMs / 1000))}
+        </p>
+
         <div className="flex justify-center">
-          <div
-            className="relative flex h-[230px] w-[230px] items-center justify-center rounded-full border-4 border-cyan-300/80 bg-cyan-100/10"
-          >
+          <div className="relative flex h-[230px] w-[230px] items-center justify-center rounded-full border-4 border-cyan-300/70 bg-cyan-100/10">
             <div
               className="flex items-center justify-center rounded-full text-sm font-semibold text-white"
               style={{
-                width: `${innerSize}px`,
-                height: `${innerSize}px`,
+                width: `${circleSize}px`,
+                height: `${circleSize}px`,
                 backgroundColor:
-                  breathingPhase === "inhale" ? "rgba(6, 182, 212, 0.55)" : "rgba(2, 132, 199, 0.42)",
+                  currentPhase.phase === "inhale"
+                    ? "rgba(6, 182, 212, 0.55)"
+                    : currentPhase.phase === "exhale"
+                      ? "rgba(2, 132, 199, 0.42)"
+                      : "rgba(14, 116, 144, 0.45)",
                 transition: `width ${BREATH_TICK_MS}ms linear, height ${BREATH_TICK_MS}ms linear, background-color ${BREATH_TICK_MS}ms linear`,
               }}
             >
-              {innerSize > 48 ? (breathingPhase === "inhale" ? "IN" : "OUT") : ""}
+              {currentPhase.phase.toUpperCase()}
             </div>
           </div>
         </div>
 
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={toggleBreathing}
-            className={`rounded-lg px-6 py-2 text-white transition ${
-              breathingActive ? "bg-red-600 hover:bg-red-500" : "bg-green-600 hover:bg-green-500"
-            }`}
-          >
-            {breathingActive ? "Stop Breathing" : "Start Breathing"}
-          </button>
-        </div>
-      </div>
+        <button
+          type="button"
+          onClick={toggleBreathing}
+          className={`rounded-lg px-6 py-2 text-white ${
+            breathingActive ? "bg-red-600 hover:bg-red-500" : "bg-green-600 hover:bg-green-500"
+          }`}
+        >
+          {breathingActive ? "Stop Breathing" : "Start Breathing"}
+        </button>
+      </section>
 
-      <audio ref={audioRef} loop preload="none" />
+      <section className="surface card space-y-4 p-6">
+        <h3 className="text-lg font-semibold">Quick Reflection</h3>
+        <div className="flex flex-wrap gap-2">
+          {reflectionChoices.map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => setReflection(choice)}
+              className={`rounded-full border px-3 py-1 text-sm ${
+                reflection === choice
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                  : "border-[var(--border)] bg-[var(--surface-2)]"
+              }`}
+            >
+              {choice}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={reflectionNote}
+          onChange={(e) => setReflectionNote(e.target.value)}
+          placeholder="Optional note..."
+          className="input min-h-20 w-full rounded-lg p-3 text-sm"
+        />
+        <button
+          type="button"
+          onClick={saveReflection}
+          className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white"
+        >
+          Save Reflection
+        </button>
+      </section>
     </div>
   );
 }
 
-function SoundButton({ label, onClick, status, isPlaying }) {
-  const baseClasses =
-    "w-full rounded-xl border border-[var(--border)] p-4 text-white transition duration-300";
-
-  const stateClasses =
-    status === "playing"
-      ? "bg-green-600 hover:bg-green-500"
-      : status === "stopped"
-        ? "bg-red-600 hover:bg-red-500"
-        : "bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--surface)]";
-
+function SliderRow({ label, value, onChange }) {
   return (
-    <div className="text-center">
-      <button type="button" onClick={onClick} className={`${baseClasses} ${stateClasses}`}>
-        {isPlaying ? "Stop" : "Play"} {label}
-      </button>
-    </div>
+    <label className="block text-sm">
+      <span className="mb-1 block text-muted">{label}: {value}</span>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full"
+      />
+    </label>
   );
 }

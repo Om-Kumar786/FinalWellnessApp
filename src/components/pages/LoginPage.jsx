@@ -4,12 +4,17 @@ const DEFAULT_ADMIN = {
   username: "admin",
   password: "admin123",
   role: "admin",
+  active: true,
 };
 
 const parseUsers = () => {
   try {
     const users = JSON.parse(localStorage.getItem("users")) || [];
-    return Array.isArray(users) ? users : [];
+    if (!Array.isArray(users)) return [];
+    return users.map((user) => ({
+      ...user,
+      active: user.active !== false,
+    }));
   } catch {
     return [];
   }
@@ -44,7 +49,7 @@ export default function LoginPage({ onLogin }) {
 
     localStorage.setItem(
       "users",
-      JSON.stringify([...existingUsers, { username, password, role: "user" }]),
+      JSON.stringify([...existingUsers, { username, password, role: "user", active: true }]),
     );
 
     alert("Account created. Please login.");
@@ -66,6 +71,11 @@ export default function LoginPage({ onLogin }) {
 
     if (!validUser) {
       alert("Invalid credentials");
+      return;
+    }
+
+    if (validUser.active === false) {
+      alert("This account is currently deactivated. Please contact an administrator.");
       return;
     }
 

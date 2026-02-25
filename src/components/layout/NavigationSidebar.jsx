@@ -1,10 +1,12 @@
 import {
   Activity,
   Brain,
+  ClipboardCheck,
   Heart,
   LayoutDashboard,
   Moon,
   Settings,
+  Shield,
   Target,
 } from "lucide-react";
 
@@ -15,12 +17,14 @@ export default function NavigationSidebar({ activeTab, onTabChange, currentUser 
 
   const items = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "checkin", label: "Daily Check-in", icon: ClipboardCheck },
     { id: "mood", label: "Mood Tracker", icon: Heart },
     { id: "sleep", label: "Sleep Log", icon: Moon },
     { id: "activity", label: "Activity", icon: Activity },
     { id: "goals", label: "Goals", icon: Target },
     { id: "mindfulness", label: "Mindfulness", icon: Brain },
     { id: "settings", label: "Settings", icon: Settings },
+    ...(isAdmin ? [{ id: "admin", label: "Admin", icon: Shield }] : []),
   ];
 
   return (
