@@ -89,11 +89,11 @@ export default function LoginPage({ onLogin }) {
         className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage:
-            "url('https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=2400&q=100')",
+            "url('https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=2400&q=90')",
         }}
       />
 
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
+      <div className="absolute inset-0 bg-black/30 dark:bg-black/50" />
 
       <div className="relative z-10 mx-4 w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[rgba(255,255,255,0.8)] p-10 text-[var(--text)] shadow-soft backdrop-blur-xl dark:bg-[rgba(15,23,42,0.75)]">
         <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border)] p-1">
