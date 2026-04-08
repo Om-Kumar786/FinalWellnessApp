@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8080/api/users";
+const API_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api/users`;
 
 const parseErrorMessage = async (response, fallback) => {
   const text = await response.text();
