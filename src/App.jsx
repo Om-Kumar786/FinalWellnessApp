@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { Moon, Sun } from "lucide-react";
 import NavigationSidebar from "./components/layout/NavigationSidebar";
 import LoginPage from "./components/pages/LoginPage";
 import LandingPage from "./components/pages/LandingPage";
+import { auth } from "./lib/firebase";
 
 const WellnessDashboard = lazy(() => import("./components/dashboard/WellnessDashboard"));
 const MoodTracker = lazy(() => import("./components/pages/MoodTracker"));
@@ -21,6 +23,22 @@ const parseJSON = (value, fallback) => {
     return fallback;
   }
 };
+
+const parseUsers = () => {
+  const users = parseJSON(localStorage.getItem("users"), []);
+  return Array.isArray(users) ? users : [];
+};
+
+const PENDING_CREDENTIAL_SETUP_KEY = "pendingCredentialSetup";
+
+const findStoredUser = (firebaseUser) =>
+  parseUsers().find(
+    (user) =>
+      user.email?.toLowerCase() === firebaseUser.email?.toLowerCase() ||
+      user.mobile === firebaseUser.phoneNumber ||
+      user.username === firebaseUser.displayName ||
+      user.username === firebaseUser.email?.split("@")[0],
+  );
 
 const DEFAULT_REMINDERS = {
   enabled: true,
@@ -131,6 +149,44 @@ export default function App() {
     if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
     return Notification.permission;
   });
+
+  useEffect(() => {
+    if (!auth) return undefined;
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      const savedUser = parseJSON(localStorage.getItem("currentUser"), null);
+
+      if (!firebaseUser) {
+        if (savedUser?.role !== "admin") {
+          localStorage.removeItem("isLoggedIn");
+          localStorage.removeItem("currentUser");
+          localStorage.removeItem("user");
+          setCurrentUser((prev) => (prev?.role === "admin" ? prev : null));
+        }
+        return;
+      }
+
+      if (localStorage.getItem(PENDING_CREDENTIAL_SETUP_KEY) === "true") {
+        return;
+      }
+
+      const storedUser = findStoredUser(firebaseUser);
+      if (storedUser?.active === false) {
+        signOut(auth).catch(() => {});
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("user");
+        setCurrentUser(null);
+        return;
+      }
+
+      if (!savedUser || savedUser.role === "admin") {
+        return;
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   const reminderStorageKey = useMemo(
     () => `reminderSettings_${currentUser?.username || "guest"}`,
@@ -276,7 +332,15 @@ export default function App() {
     );
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (auth?.currentUser) {
+      try {
+        await signOut(auth);
+      } catch {
+        // Fall back to local cleanup even if the network sign-out handshake fails.
+      }
+    }
+
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("currentUser");
     localStorage.removeItem("user");

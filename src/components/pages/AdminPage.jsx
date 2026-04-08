@@ -1,4 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  deleteUser as deleteUserRequest,
+  fetchUsers,
+  updateUser,
+  updateUserAccess,
+} from "../../services/userApi";
 
 const DEFAULT_CONFIG = {
   defaultReminders: {
@@ -33,8 +39,9 @@ const parseJSON = (value, fallback) => {
 const normalizeUsers = (users) =>
   (Array.isArray(users) ? users : []).map((user) => ({
     ...user,
+    id: user.id,
     active: user.active !== false,
-    role: user.role || "user",
+    role: String(user.role || "user").toLowerCase(),
   }));
 
 const getWellnessByUser = (username) =>
@@ -47,13 +54,26 @@ const getWellnessByUser = (username) =>
     stressLevel: "Low",
   });
 
+const removeUserArtifacts = (user) => {
+  [
+    `wellnessData_${user.username}`,
+    `reminderSettings_${user.username}`,
+    `reminderSent_${user.username}`,
+    `notificationPermission_${user.username}`,
+  ].forEach((key) => localStorage.removeItem(key));
+
+  const reminderFailures = parseJSON(localStorage.getItem("reminderFailures"), {});
+  if (Object.prototype.hasOwnProperty.call(reminderFailures, user.username)) {
+    delete reminderFailures[user.username];
+    localStorage.setItem("reminderFailures", JSON.stringify(reminderFailures));
+  }
+};
+
 export default function AdminPage({ currentUser }) {
   const isAdmin = (currentUser?.role || "user") === "admin";
   const actor = currentUser?.username || "admin";
 
-  const [users, setUsers] = useState(() =>
-    normalizeUsers(parseJSON(localStorage.getItem("users"), [])),
-  );
+  const [users, setUsers] = useState([]);
   const [config, setConfig] = useState(() =>
     ({
       ...DEFAULT_CONFIG,
@@ -71,6 +91,26 @@ export default function AdminPage({ currentUser }) {
     localStorage.getItem("adminBackupCheckedAt") || "Never",
   );
   const [reviewedFlags, setReviewedFlags] = useState({});
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [userActionError, setUserActionError] = useState("");
+
+  const loadUsers = async () => {
+    setIsLoadingUsers(true);
+    setUserActionError("");
+
+    try {
+      const nextUsers = await fetchUsers();
+      setUsers(normalizeUsers(nextUsers));
+    } catch (error) {
+      setUserActionError(error.message || "Unable to load users from the backend.");
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
   const userSummaries = useMemo(() => {
     return users.map((user) => {
@@ -191,11 +231,6 @@ export default function AdminPage({ currentUser }) {
     };
   }, [users]);
 
-  const persistUsers = (nextUsers) => {
-    localStorage.setItem("users", JSON.stringify(nextUsers));
-    setUsers(nextUsers);
-  };
-
   const pushAudit = (action, target) => {
     const nextLogs = [
       {
@@ -211,38 +246,112 @@ export default function AdminPage({ currentUser }) {
     localStorage.setItem("adminAuditLogs", JSON.stringify(nextLogs));
   };
 
-  const updateUserStatus = (username) => {
-    const nextUsers = users.map((user) => {
-      if (user.username !== username) return user;
-      return { ...user, active: user.active === false };
-    });
-    persistUsers(nextUsers);
-    pushAudit("toggle_user_status", username);
+  const handleUserStatusUpdate = async (targetUser) => {
+    setUserActionError("");
+
+    if (!targetUser) return;
+
+    const activeAdminCount = users.filter(
+      (user) => user.role === "admin" && user.active !== false,
+    ).length;
+
+    if (targetUser.role === "admin" && targetUser.active !== false && activeAdminCount <= 1) {
+      alert("At least one active admin account must remain.");
+      return;
+    }
+
+    try {
+      const updatedUser = await updateUserAccess(targetUser.id, targetUser.active === false);
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === targetUser.id ? normalizeUsers([updatedUser])[0] : user,
+        ),
+      );
+      pushAudit(
+        targetUser.active === false ? "restore_user_access" : "block_user_access",
+        targetUser.username,
+      );
+    } catch (error) {
+      setUserActionError(error.message || "Failed to update user access.");
+    }
   };
 
-  const updateUserRole = (username, role) => {
-    const adminCount = users.filter((user) => user.role === "admin").length;
-    const targetUser = users.find((user) => user.username === username);
+  const handleUserRoleUpdate = async (targetUser, role) => {
+    setUserActionError("");
 
-    if (targetUser?.role === "admin" && role !== "admin" && adminCount <= 1) {
+    if (!targetUser) return;
+
+    const adminCount = users.filter((user) => user.role === "admin").length;
+    if (targetUser.role === "admin" && role !== "admin" && adminCount <= 1) {
       alert("At least one admin account must remain.");
       return;
     }
 
-    const nextUsers = users.map((user) => (user.username === username ? { ...user, role } : user));
-    persistUsers(nextUsers);
-    pushAudit("change_user_role", `${username} -> ${role}`);
+    try {
+      const updatedUser = await updateUser(targetUser.id, {
+        ...targetUser,
+        role: role.toUpperCase(),
+      });
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === targetUser.id ? normalizeUsers([updatedUser])[0] : user,
+        ),
+      );
+      pushAudit("change_user_role", `${targetUser.username} -> ${role}`);
+    } catch (error) {
+      setUserActionError(error.message || "Failed to update user role.");
+    }
   };
 
-  const resetPassword = (username) => {
-    const newPassword = window.prompt(`Set new password for ${username}`, "welcome123");
+  const handlePasswordReset = async (targetUser) => {
+    setUserActionError("");
+
+    if (!targetUser) return;
+
+    const newPassword = window.prompt(`Set new password for ${targetUser.username}`, "welcome123");
     if (!newPassword) return;
 
-    const nextUsers = users.map((user) =>
-      user.username === username ? { ...user, password: newPassword } : user,
+    try {
+      const updatedUser = await updateUser(targetUser.id, {
+        ...targetUser,
+        role: String(targetUser.role || "user").toUpperCase(),
+        password: newPassword,
+      });
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.id === targetUser.id ? normalizeUsers([updatedUser])[0] : user,
+        ),
+      );
+      pushAudit("reset_password", targetUser.username);
+    } catch (error) {
+      setUserActionError(error.message || "Failed to reset password.");
+    }
+  };
+
+  const handleDeleteUser = async (targetUser) => {
+    setUserActionError("");
+
+    if (!targetUser) return;
+
+    const adminCount = users.filter((user) => user.role === "admin").length;
+    if (targetUser.role === "admin" && adminCount <= 1) {
+      alert("At least one admin account must remain.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${targetUser.username}? This removes the account and clears local wellness data for that user.`,
     );
-    persistUsers(nextUsers);
-    pushAudit("reset_password", username);
+    if (!confirmed) return;
+
+    try {
+      await deleteUserRequest(targetUser.id);
+      removeUserArtifacts(targetUser);
+      setUsers((prev) => prev.filter((user) => user.id !== targetUser.id));
+      pushAudit("delete_user", targetUser.username);
+    } catch (error) {
+      setUserActionError(error.message || "Failed to delete user.");
+    }
   };
 
   const updateReminderConfig = (key, patch) => {
@@ -312,44 +421,67 @@ export default function AdminPage({ currentUser }) {
 
       <section className="surface card p-6">
         <h2 className="mb-4 text-xl font-semibold">User Management</h2>
+        {userActionError && (
+          <div className="mb-4 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-soft)] p-3 text-sm text-[var(--danger)]">
+            {userActionError}
+          </div>
+        )}
         <div className="space-y-3">
-          {users.map((user) => (
-            <div
-              key={user.username}
-              className="grid gap-3 rounded-xl border border-[var(--border)] p-3 md:grid-cols-[1.2fr_auto_auto_auto_auto]"
-            >
-              <div>
-                <p className="font-medium">{user.username}</p>
-                <p className="text-xs text-muted">
-                  {user.active !== false ? "Active" : "Deactivated"} • {user.role}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => updateUserStatus(user.username)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
-              >
-                {user.active !== false ? "Deactivate" : "Activate"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => updateUserRole(user.username, user.role === "admin" ? "user" : "admin")}
-                className="rounded-lg border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
-              >
-                Set {user.role === "admin" ? "User" : "Admin"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => resetPassword(user.username)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
-              >
-                Reset Password
-              </button>
+          {isLoadingUsers ? (
+            <div className="rounded-xl border border-[var(--border)] p-4 text-sm text-muted">
+              Loading users from Spring Boot...
             </div>
-          ))}
+          ) : users.length === 0 ? (
+            <div className="rounded-xl border border-[var(--border)] p-4 text-sm text-muted">
+              No users found in the backend database yet.
+            </div>
+          ) : (
+            users.map((user) => (
+              <div
+                key={user.id ?? user.username}
+                className="grid gap-3 rounded-xl border border-[var(--border)] p-3 md:grid-cols-[1.2fr_auto_auto_auto_auto] xl:grid-cols-[1.2fr_auto_auto_auto_auto]"
+              >
+                <div>
+                  <p className="font-medium">{user.username}</p>
+                  <p className="text-xs text-muted">
+                    {user.active !== false ? "Active" : "Access blocked"} | {user.role}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleUserStatusUpdate(user)}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
+                >
+                  {user.active !== false ? "Block Access" : "Restore Access"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleUserRoleUpdate(user, user.role === "admin" ? "user" : "admin")}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
+                >
+                  Set {user.role === "admin" ? "User" : "Admin"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePasswordReset(user)}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1 text-sm hover:bg-[var(--surface-2)]"
+                >
+                  Reset Password
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteUser(user)}
+                  className="rounded-lg border border-[var(--danger)]/40 px-3 py-1 text-sm text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                >
+                  Delete User
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
