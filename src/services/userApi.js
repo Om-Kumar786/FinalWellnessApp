@@ -1,4 +1,6 @@
-const API_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api/users`;
+const apiBaseUrl =
+  import.meta.env.VITE_API_BASE_URL || "https://pulse-backend-production-78ec.up.railway.app";
+const API_BASE_URL = `${apiBaseUrl}/api/users`;
 
 const parseErrorMessage = async (response, fallback) => {
   const text = await response.text();

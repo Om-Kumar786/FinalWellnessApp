@@ -1,4 +1,6 @@
-const AUTH_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api/auth`;
+const apiBaseUrl =
+  import.meta.env.VITE_API_BASE_URL || "https://pulse-backend-production-78ec.up.railway.app";
+const AUTH_BASE_URL = `${apiBaseUrl}/api/auth`;
 
 export async function registerUser(payload) {
   const response = await fetch(`${AUTH_BASE_URL}/register`, {
