@@ -15,8 +15,9 @@ import {
 import { motivationLines } from "../../data/motivationLines";
 import { healthTips } from "../../data/healthTips";
 
-const OPEN_WEATHER_API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY;
-const OPEN_WEATHER_CITY = import.meta.env.VITE_OPENWEATHER_CITY;
+const OPEN_WEATHER_API_KEY =
+  import.meta.env.VITE_OPENWEATHER_API_KEY || "f0c69eb55f370e378a3075c2e85e7e16";
+const OPEN_WEATHER_CITY = import.meta.env.VITE_OPENWEATHER_CITY || "Kolkata";
 
 const WEATHER_STATUS = {
   idle: "idle",
